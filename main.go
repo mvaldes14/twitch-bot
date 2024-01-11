@@ -1,11 +1,9 @@
 package main
 
 import (
+	"github.com/gempir/go-twitch-irc/v4"
 	"log"
 	"os"
-
-	"github.com/gempir/go-twitch-irc/v4"
-	"github.com/joho/godotenv"
 )
 
 const (
@@ -14,10 +12,6 @@ const (
 
 func main() {
 	log.Println("Starting bot...")
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Could not read .env file")
-	}
 
 	token := os.Getenv("TWITCH_TOKEN")
 	if token == "" {
@@ -35,6 +29,12 @@ func main() {
 		if message.Message == "!socials" {
 			client.Say(channel_name, "Twitter - https://x.com/mr_mvaldes")
 		}
+		if message.Message == "!github" {
+			client.Say(channel_name, "Github - https://links.mvaldes.dev/gh")
+		}
+		if message.Message == "!commands" {
+			client.Say(channel_name, "Commands - !dotfiles, !socials, !github")
+		}
 	})
 
 	client.OnUserNoticeMessage(func(message twitch.UserNoticeMessage) {
@@ -42,9 +42,9 @@ func main() {
 	})
 
 	client.Join(channel_name)
-	error := client.Connect()
+	err := client.Connect()
 	if err != nil {
-		log.Fatal(error)
+		log.Fatal(err)
 	}
 
 }
