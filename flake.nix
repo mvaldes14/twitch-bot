@@ -11,6 +11,7 @@
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [
           go
+          act
         ];
       };
     };
