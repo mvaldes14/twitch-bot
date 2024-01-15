@@ -21,4 +21,4 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: twitch-bot:latest
+          tags: rorix/twitch-bot:latest
