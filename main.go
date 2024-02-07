@@ -39,6 +39,7 @@ func main() {
 
 	client.OnUserNoticeMessage(func(message twitch.UserNoticeMessage) {
 		client.Say(channel_name, "User notice message")
+    log.Println(message)
 	})
 
 	client.Join(channel_name)
@@ -46,5 +47,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
