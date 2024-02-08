@@ -1,38 +1,42 @@
 {
-  description = "Go Runtime for Project";
+  description = "Twitch Bot Environment and build tools";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-  outputs = { nixpkgs, self }:
-    let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
-      name = "twitch-bot";
-      username = "mvaldes14";
-    in
-    {
-      devShells.${system}.default = pkgs.mkShell {
-        buildInputs = with pkgs;[
-          go
-          act
-        ];
-      };
-      packages = {
-        default = pkgs.buildGoPackage {
-          inherit name;
-          goPackagePath = "github.com/${username}/${name}";
-          goDeps = [
-            {
-              goPackagePath = "github.com/gempir/go-twitch-irc";
-              fetch = {
-                type = "git";
-                url = "https://github.com/gempir/go-twitch-irc";
-                rev = "01bg6bx8ivqww56m2s73yi0991n18bsp366hd3vxic62ax7q4qy5";
-                hash = "something";
+  outputs = inputs@{ flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
+
+      perSystem = { config, self', inputs', pkgs, system, ... }:
+        let
+          name = "twitch-bot";
+          vendorHash = "sha256-K6m/47EgPqrHXaFqB25Jrf0A2E051pdwbhi3cbiKTG0=";
+          version = "0.1.0";
+        in
+        {
+           devShells = {
+            default = pkgs.mkShell {
+              inputsFrom = [ self'.packages.default ];
+              nativeBuildInputs = [ pkgs.act];
+            };
+          };
+          packages = {
+            default = pkgs.buildGoModule {
+              inherit name vendorHash;
+              src = ./.;
+              subPackages = [ "cmd/bot" ];
+            };
+
+            docker = pkgs.dockerTools.buildImage {
+              inherit name;
+              tag = version;
+              config = {
+                Cmd = "${self'.packages.default}/bin/${name}";
+                Env = [
+                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                ];
               };
-            }
-          ];
-          src = ./.;
+            };
+          };
         };
-      };
     };
 }

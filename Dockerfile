@@ -11,6 +11,6 @@ WORKDIR /app
 COPY . /app
 
 # Build the Go app
-RUN go build -o twitch-bot .
+RUN go build -o twitch-bot cmd/bot/main.go
 
 ENTRYPOINT ["doppler", "run", "--", "/app/twitch-bot"]
