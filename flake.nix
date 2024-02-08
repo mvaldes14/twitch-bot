@@ -9,7 +9,7 @@
       perSystem = { config, self', inputs', pkgs, system, ... }:
         let
           name = "twitch-bot";
-          vendorHash = "sha256-K6m/47EgPqrHXaFqB25Jrf0A2E051pdwbhi3cbiKTG0=";
+          vendorHash = "sha256-RkEW49MTqfWP7n9q/72SGffbzMEwv2sBoW+1to25Vvo=";
           version = "0.1.0";
         in
         {
