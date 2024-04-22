@@ -23,6 +23,7 @@ func main() {
 	client := twitch.NewClient(channel_name, token)
 
 	client.OnPrivateMessage(func(message twitch.PrivateMessage) {
+		log.Println(message)
 		if message.Message == "!dotfiles" {
 			log.Println("Sending dotfiles link - requestor:", message.User.DisplayName)
 			client.Say(channel_name, "Dotfiles - https://links.mvaldes.dev/dotfiles")
@@ -39,8 +40,11 @@ func main() {
 	})
 
 	client.OnUserNoticeMessage(func(message twitch.UserNoticeMessage) {
-		client.Say(channel_name, "User notice message")
-    log.Println(message)
+		log.Println(message)
+	})
+
+	client.OnNoticeMessage(func(message twitch.NoticeMessage) {
+		log.Println(message)
 	})
 
 	client.Join(channel_name)
