@@ -1,48 +1,65 @@
-package main
+package subscriptions
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"net/http"
+
+	"github.com/mvaldes14/twitch-bot/pkgs/types"
 )
 
-const URL string = "https://api.twitch.tv/helix/eventsub/subscriptions"
+const (
+	userID      = "1792311"
+	callbackURL = "https://evil-buses-argue.loca.lt/"
+	secret      = "superSecret123"
+)
 
 // Create a subscription
-func subscribeEvent() {
-	payload := []byte(`{"type":"channel.chat.message","version":"1","condition":{"broadcaster_user_id":"1792311", "user_id": "1792311"},"transport":{"method":"webhook","callback":"https://dirty-garlics-pull.loca.lt/","secret":"s3cre77890ab"}}`)
-	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(payload))
+// TODO: Respond to challenge
+func GeneratePayload(subType types.SubscriptionType) string {
+	var payload string
 
-	if err != nil {
-		return
+	switch subType.Name {
+	case "chat":
+		payload = fmt.Sprintf(`{
+      "type":"%v",
+      "version":"%v",
+      "condition":{
+        "broadcaster_user_id":"%v",
+        "user_id": "%v"
+      },
+      "transport": {
+        "method":"webhook",
+        "callback":"%v","secret":"%v"
+      }
+    }`, subType.Type, subType.Version, userID, userID, callbackURL, secret)
+
+	case "follow":
+		payload = fmt.Sprintf(`{
+      "type": "%v",
+      "version": "%v",
+      "condition": {
+        "broadcaster_user_id": "%v",
+        "moderator_user_id": "%v"
+      },
+      "transport": {
+        "method": "webhook",
+        "callback": "%v","secret": "%v"
+      }
+    }`, subType.Type, subType.Version, userID, userID, callbackURL, secret)
+
+	case "sub":
+		payload = fmt.Sprintf(`{
+      "type": "%v",
+      "version": "%v",
+      "condition": {
+          "broadcaster_user_id": "%v"
+      },
+      "transport": {
+          "method": "webhook",
+          "callback": "%v",
+          "secret": "%v"
+      }
+    }`, subType.Type, subType.Version, userID, callbackURL, secret)
+
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer redacted")
-	req.Header.Set("Client-Id", "redacted")
-	// Create an HTTP client
-	client := &http.Client{}
-
-	// Send the request and get the response
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Print the response status code
-	fmt.Println("Response Status:", resp.Status)
-	fmt.Println("Response Header:", resp.Header)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
-	fmt.Println("Response Body:", string(body))
-}
-
-func main() {
-
-	subscribeEvent()
+	return payload
 }

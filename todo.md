@@ -14,3 +14,8 @@
     - check headers for type of events
         - header['Twitch-Eventsub-Message-Type'] == 'notification' to get event data
         - header['Twitch-Eventsub-Message-Type'] == 'webhook_callback_verification' to subscribe to events
+
+
+cmd -> http -> routes (types)
+            -> helper (subscription)
+            -> log/index (elastic)
