@@ -13,6 +13,12 @@ type RequestHeader struct {
 	ClientID string
 }
 
+type ChatMessage struct {
+	BroadcasterID string `json:"broadcaster_id"`
+	SenderID      string `json:"sender_id"`
+	Message       string `json:"message"`
+}
+
 type ValidateSubscription struct {
 	Data []struct {
 		ID        string `json:"id"`

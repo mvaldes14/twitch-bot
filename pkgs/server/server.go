@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/commands"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
@@ -34,6 +35,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		r.Body.Close()
 		json.Unmarshal(body, &chatEvent)
 		fmt.Printf("User: %v msg: %v", chatEvent.Event.BroadcasterUserLogin, chatEvent.Event.Message.Text)
+		commands.ParseMessage(chatEvent)
 	} else {
 		fmt.Print("Unsupported request type")
 	}
