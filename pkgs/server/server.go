@@ -22,7 +22,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		r.Body.Close()
+		defer r.Body.Close()
 		json.Unmarshal(body, &challengeResponse)
 		w.Header().Add("Content-Type", "plain/text")
 		w.Write([]byte(challengeResponse.Challenge))
@@ -32,7 +32,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		r.Body.Close()
+		defer r.Body.Close()
 		json.Unmarshal(body, &chatEvent)
 		fmt.Printf("User: %v msg: %v\n", chatEvent.Event.ChatterUserName, chatEvent.Event.Message.Text)
 		commands.ParseMessage(chatEvent)
@@ -76,11 +76,61 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 		// Generate subscription type for subscriptions
 		chatSubType := types.SubscriptionType{
 			Name:    "subscribe",
-			Version: "2",
+			Version: "1",
 			Type:    "channel.subscribe",
 		}
 		payload := utils.GeneratePayload(chatSubType)
 		subscriptions.CreateSubscription(payload)
+	}
+}
+
+func followHandler(w http.ResponseWriter, r *http.Request) {
+	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
+	if headerType == "webhook_callback_verification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var subscriptionResponse types.SubscribeEvent
+		json.Unmarshal(body, &subscriptionResponse)
+		fmt.Println("Responding to challenge")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(subscriptionResponse.Challenge))
+	} else if headerType == "notification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var followEventResponse types.FollowEvent
+		json.Unmarshal(body, &followEventResponse)
+		commands.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
+	}
+}
+
+func subHandler(w http.ResponseWriter, r *http.Request) {
+	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
+	if headerType == "webhook_callback_verification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var subscriptionResponse types.SubscribeEvent
+		json.Unmarshal(body, &subscriptionResponse)
+		fmt.Println("Responding to challenge")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(subscriptionResponse.Challenge))
+	} else if headerType == "notification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var followEventResponse types.SubscriptionEvent
+		json.Unmarshal(body, &followEventResponse)
+		commands.SendMessage(fmt.Sprintf("Gracias por el sub: %v", followEventResponse.Event.UserName))
 	}
 }
 
@@ -90,8 +140,8 @@ func NewServer() {
 	http.HandleFunc("/delete", deleteHandler)
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/chat", chatHandler)
-	// http.HandleFunc("/follow", chatHandler)
-	// http.HandleFunc("/subs", chatHandler)
+	http.HandleFunc("/follow", followHandler)
+	http.HandleFunc("/sub", subHandler)
 	fmt.Println("Running and listening")
 	http.ListenAndServe(":3000", nil)
 }

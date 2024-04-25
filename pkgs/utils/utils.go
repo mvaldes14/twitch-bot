@@ -64,7 +64,7 @@ func GeneratePayload(subType types.SubscriptionType) string {
       }
     }`, subType.Type, subType.Version, userID, userID, callbackURL, secret)
 
-	case "sub":
+	case "subscribe":
 		payload = fmt.Sprintf(`{
       "type": "%v",
       "version": "%v",
