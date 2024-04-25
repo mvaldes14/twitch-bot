@@ -11,7 +11,7 @@ import (
 
 const (
 	userID      = "1792311"
-	callbackURL = "https://fifty-clubs-fly.loca.lt"
+	callbackURL = "https://neat-suits-suffer.loca.lt"
 	secret      = "superSecret123"
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
