@@ -2,8 +2,7 @@
 - Add messages for user events like follow
 - Figure out messages for subs/etc when the time comes
 - Add more commands to bot
-- send logs/activity to elastic
-- branch for webhooks
+- [x] branch for webhooks ✅ 2024-04-24
     - remove irc library
     - put secrets in env variables -> doppler
     - need callback on 443, done with kubernetes + cloudflared
@@ -15,8 +14,9 @@
     - check headers for type of events
         - header['Twitch-Eventsub-Message-Type'] == 'notification' to get event data
         - header['Twitch-Eventsub-Message-Type'] == 'webhook_callback_verification' to subscribe to events
-
-
-cmd -> http -> routes (types)
-            -> helper (subscription)
-            -> log/index (elastic)
+    cmd -> http -> routes (types)
+                -> helper (subscription)
+                -> log/index (elastic)
+- [ ] send logs/activity to elastic
+    - format all logs and statements into json for easy parsing
+    - generate the credentials in elastic for ingestion
