@@ -27,10 +27,8 @@ func CreateSubscription(payload string) *http.Response {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
-
 	// Create an HTTP client
 	client := &http.Client{}
-
 	// Send the request and get the response
 	log.Println("Sending request")
 	resp, err := client.Do(req)
@@ -39,6 +37,7 @@ func CreateSubscription(payload string) *http.Response {
 		return nil
 	}
 	log.Println("Subscription response:", resp.StatusCode)
+	log.Println(resp)
 	return resp
 }
 
@@ -50,7 +49,6 @@ func GetSubscriptions() types.ValidateSubscription {
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
-
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request:", err)
@@ -59,7 +57,6 @@ func GetSubscriptions() types.ValidateSubscription {
 	var subscriptionList types.ValidateSubscription
 	json.Unmarshal(body, &subscriptionList)
 	return subscriptionList
-
 }
 
 // CleanSubscriptions Removes all existing subscriptions
@@ -76,7 +73,6 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
 			client := &http.Client{}
-
 			resp, err := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
 				log.Println("Subscription deleted:", sub.ID)
