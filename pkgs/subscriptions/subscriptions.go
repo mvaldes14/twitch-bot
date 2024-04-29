@@ -40,7 +40,7 @@ func CreateSubscription(payload string) *http.Response {
 	log.Println("Subscription response:", resp.StatusCode)
 	log.Println(resp)
 	body, _ := io.ReadAll(resp.Body)
-	log.Println(body)
+	log.Println(string(body))
 	return resp
 }
 
