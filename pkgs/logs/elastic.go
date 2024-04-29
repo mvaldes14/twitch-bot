@@ -10,16 +10,11 @@ import (
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/joho/godotenv"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 )
 
 // NewClient returns a new client to connect to elasticsearch
 func NewClient() *elasticsearch.Client {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Error loading .env file")
-	}
 	password := os.Getenv("ELASTIC_PASSWORD")
 	cfg := elasticsearch.Config{
 		Addresses: []string{

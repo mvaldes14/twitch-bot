@@ -4,10 +4,7 @@ go 1.21
 
 toolchain go1.21.5
 
-require (
-	github.com/elastic/go-elasticsearch/v8 v8.13.1
-	github.com/joho/godotenv v1.5.1
-)
+require github.com/elastic/go-elasticsearch/v8 v8.13.1
 
 require (
 	github.com/elastic/elastic-transport-go/v8 v8.5.0 // indirect
