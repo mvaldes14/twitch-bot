@@ -12,7 +12,7 @@ import (
 
 const (
 	userID      = "1792311"
-	callbackURL = "https://shaggy-rabbits-dance.loca.lt/"
+	callbackURL = "https://bot.mvaldes.dev"
 	secret      = "superSecret123"
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
