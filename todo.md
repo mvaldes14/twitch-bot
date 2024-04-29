@@ -18,5 +18,7 @@
                 -> helper (subscription)
                 -> log/index (elastic)
 - [ ] send logs/activity to elastic
-    - format all logs and statements into json for easy parsing
-    - generate the credentials in elastic for ingestion
+    - [x] format all logs and statements into json for easy parsing ✅ 2024-04-28
+    - [x] generate the credentials in elastic for ingestion ✅ 2024-04-28
+    - [x] client working and indexing ✅ 2024-04-28
+        - modify dns to point to kubernetes at deploy

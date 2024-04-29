@@ -3,6 +3,7 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -11,7 +12,7 @@ import (
 
 const (
 	userID      = "1792311"
-	callbackURL = "https://neat-suits-suffer.loca.lt"
+	callbackURL = "https://shaggy-rabbits-dance.loca.lt/"
 	secret      = "superSecret123"
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
@@ -20,7 +21,7 @@ const (
 func BuildHeaders() types.RequestHeader {
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("Error loading .env file")
+		log.Println("Error loading .env file")
 	}
 	token := os.Getenv("TWITCH_TOKEN")
 	clientID := os.Getenv("TWITCH_CLIENT_ID")
