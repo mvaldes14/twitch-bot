@@ -18,7 +18,7 @@ func NewClient() *elasticsearch.Client {
 	password := os.Getenv("ELASTIC_PASSWORD")
 	cfg := elasticsearch.Config{
 		Addresses: []string{
-			"https://localhost:9200",
+			"https://homelab-es-http.elastic:9200",
 		},
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
