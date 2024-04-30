@@ -82,7 +82,7 @@ func GeneratePayload(subType types.SubscriptionType) string {
       },
       "transport": {
           "method": "webhook",
-          "callback": "%v/sub",
+          "callback": "%v/cheer",
           "secret": "%v"
       }
     }`, subType.Type, subType.Version, userID, callbackURL, secret)
