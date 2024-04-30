@@ -4,7 +4,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -33,5 +33,7 @@ func SendMessage(text string) {
 	if err != nil {
 		return
 	}
-	fmt.Println(res.StatusCode)
+	if res.StatusCode != 200 {
+		log.Println("Error sending message to chat")
+	}
 }

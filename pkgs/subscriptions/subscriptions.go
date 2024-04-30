@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -26,18 +27,20 @@ func CreateSubscription(payload string) *http.Response {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
-
 	// Create an HTTP client
 	client := &http.Client{}
-
 	// Send the request and get the response
-	fmt.Println("Sending request")
+	log.Println("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Println("Error sending request:", err)
 		return nil
 	}
-	fmt.Println("Subscription response:", resp.StatusCode)
+	defer resp.Body.Close()
+	log.Println("Subscription response:", resp.StatusCode)
+	log.Println(resp)
+	body, _ := io.ReadAll(resp.Body)
+	log.Println(string(body))
 	return resp
 }
 
@@ -49,16 +52,14 @@ func GetSubscriptions() types.ValidateSubscription {
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
-
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Println("Error sending request:", err)
 	}
 	body, err := io.ReadAll(resp.Body)
 	var subscriptionList types.ValidateSubscription
 	json.Unmarshal(body, &subscriptionList)
 	return subscriptionList
-
 }
 
 // CleanSubscriptions Removes all existing subscriptions
@@ -75,13 +76,12 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
 			client := &http.Client{}
-
 			resp, err := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
-				fmt.Println("Subscription deleted:", sub.ID)
+				log.Println("Subscription deleted:", sub.ID)
 			}
 		}
 	} else {
-		fmt.Println("No subscriptions to delete")
+		log.Println("No subscriptions to delete")
 	}
 }

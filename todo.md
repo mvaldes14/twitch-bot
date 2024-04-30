@@ -17,6 +17,10 @@
     cmd -> http -> routes (types)
                 -> helper (subscription)
                 -> log/index (elastic)
-- [ ] send logs/activity to elastic
-    - format all logs and statements into json for easy parsing
-    - generate the credentials in elastic for ingestion
+- [x] send logs/activity to elastic ✅ 2024-04-28
+    - [x] format all logs and statements into json for easy parsing ✅ 2024-04-28
+    - [x] generate the credentials in elastic for ingestion ✅ 2024-04-28
+    - [x] client working and indexing ✅ 2024-04-28
+        -  [x] modify dns to point to kubernetes at deploy ✅ 2024-04-28
+        - [ ] Generate makefile to run the process with .env
+        - [ ] Add log events for handlers (chat, follow, sub)

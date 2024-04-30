@@ -5,23 +5,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/joho/godotenv"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 )
 
 const (
 	userID      = "1792311"
-	callbackURL = "https://neat-suits-suffer.loca.lt"
+	callbackURL = "https://bots.mvaldes.dev"
 	secret      = "superSecret123"
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
 // BuildHeaders Returns the secrets from env variables to build headers for requests
 func BuildHeaders() types.RequestHeader {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Error loading .env file")
-	}
 	token := os.Getenv("TWITCH_TOKEN")
 	clientID := os.Getenv("TWITCH_CLIENT_ID")
 	return types.RequestHeader{

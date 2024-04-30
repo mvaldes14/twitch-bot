@@ -2,6 +2,13 @@ package types
 
 import "time"
 
+type EventLog struct {
+	Username  string    `json:"username"`
+	Message   string    `json:"message"`
+	Timestamp time.Time `json:"@timestamp"`
+	Type      string    `json:"type"`
+}
+
 type SubscriptionType struct {
 	Name    string
 	Version string
