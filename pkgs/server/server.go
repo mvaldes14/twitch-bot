@@ -33,12 +33,12 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 	switch subType {
 	case "chat":
 		// Generate subscription type for chats
-		chatSubType := types.SubscriptionType{
+		subType := types.SubscriptionType{
 			Name:    "chat",
 			Version: "1",
 			Type:    "channel.chat.message",
 		}
-		payload := utils.GeneratePayload(chatSubType)
+		payload := utils.GeneratePayload(subType)
 		subscriptions.CreateSubscription(payload)
 	case "follow":
 		// Generate subscription type for follow
@@ -55,6 +55,15 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 			Name:    "subscribe",
 			Version: "1",
 			Type:    "channel.subscribe",
+		}
+		payload := utils.GeneratePayload(chatSubType)
+		subscriptions.CreateSubscription(payload)
+	case "cheer":
+		// Generate subscription type for subscriptions
+		chatSubType := types.SubscriptionType{
+			Name:    "cheer",
+			Version: "1",
+			Type:    "channel.cheer",
 		}
 		payload := utils.GeneratePayload(chatSubType)
 		subscriptions.CreateSubscription(payload)

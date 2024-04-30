@@ -73,6 +73,19 @@ func GeneratePayload(subType types.SubscriptionType) string {
       }
     }`, subType.Type, subType.Version, userID, callbackURL, secret)
 
+	case "cheer":
+		payload = fmt.Sprintf(`{
+      "type": "%v",
+      "version": "%v",
+      "condition": {
+          "broadcaster_user_id": "%v"
+      },
+      "transport": {
+          "method": "webhook",
+          "callback": "%v/cheer",
+          "secret": "%v"
+      }
+    }`, subType.Type, subType.Version, userID, callbackURL, secret)
 	}
 	return payload
 }
