@@ -172,7 +172,7 @@ func cheerHandler(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(body, &cheerEventResponse)
 		// send to elastic
 		msg := fmt.Sprintf("User: %v, Bits: %v", cheerEventResponse.Event.UserName, cheerEventResponse.Event.Bits)
-		logs.IndexEvent(es, cheerEventResponse.Event.UserName, msg, "sub")
+		logs.IndexEvent(es, cheerEventResponse.Event.UserName, msg, "cheer")
 	}
 
 }
