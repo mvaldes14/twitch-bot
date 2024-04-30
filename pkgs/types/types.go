@@ -171,3 +171,32 @@ type SubscriptionEvent struct {
 		IsGift               bool   `json:"is_gift"`
 	} `json:"event"`
 }
+
+type CheerEvent struct {
+	Subscription struct {
+		ID        string `json:"id"`
+		Type      string `json:"type"`
+		Version   string `json:"version"`
+		Status    string `json:"status"`
+		Cost      int    `json:"cost"`
+		Condition struct {
+			BroadcasterUserID string `json:"broadcaster_user_id"`
+		} `json:"condition"`
+		Transport struct {
+			Method   string `json:"method"`
+			Callback string `json:"callback"`
+		} `json:"transport"`
+		CreatedAt time.Time `json:"created_at"`
+	} `json:"subscription"`
+	Event struct {
+		IsAnonymous          bool   `json:"is_anonymous"`
+		UserID               string `json:"user_id"`
+		UserLogin            string `json:"user_login"`
+		UserName             string `json:"user_name"`
+		BroadcasterUserID    string `json:"broadcaster_user_id"`
+		BroadcasterUserLogin string `json:"broadcaster_user_login"`
+		BroadcasterUserName  string `json:"broadcaster_user_name"`
+		Message              string `json:"message"`
+		Bits                 int    `json:"bits"`
+	} `json:"event"`
+}

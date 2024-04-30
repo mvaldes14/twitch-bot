@@ -149,6 +149,34 @@ func subHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func cheerHandler(w http.ResponseWriter, r *http.Request) {
+	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
+	if headerType == "webhook_callback_verification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var subscriptionResponse types.SubscribeEvent
+		json.Unmarshal(body, &subscriptionResponse)
+		fmt.Println("Responding to challenge")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(subscriptionResponse.Challenge))
+	} else if headerType == "notification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var cheerEventResponse types.CheerEvent
+		json.Unmarshal(body, &cheerEventResponse)
+		// send to elastic
+		msg := fmt.Sprintf("User: %v, Bits: %v", cheerEventResponse.Event.UserName, cheerEventResponse.Event.Bits)
+		logs.IndexEvent(es, cheerEventResponse.Event.UserName, msg, "sub")
+	}
+
+}
+
 // NewServer creates the http server
 func NewServer() {
 	http.HandleFunc("/create", createHandler)
@@ -157,6 +185,7 @@ func NewServer() {
 	http.HandleFunc("/chat", chatHandler)
 	http.HandleFunc("/follow", followHandler)
 	http.HandleFunc("/sub", subHandler)
+	http.HandleFunc("/cheer", cheerHandler)
 	log.Println("Running and listening")
 	http.ListenAndServe(":3000", nil)
 }
