@@ -38,7 +38,6 @@ func CreateSubscription(payload string) *http.Response {
 	}
 	defer resp.Body.Close()
 	log.Println("Subscription response:", resp.StatusCode)
-	log.Println(resp)
 	body, _ := io.ReadAll(resp.Body)
 	log.Println(string(body))
 	return resp
