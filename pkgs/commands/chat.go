@@ -4,6 +4,7 @@ package commands
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -22,6 +23,7 @@ const (
 
 // ParseMessage Parses the incoming messages from stream
 func ParseMessage(msg types.ChatMessageEvent) {
+	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
 		SendMessage("!github, !dotfiles")
@@ -31,7 +33,9 @@ func ParseMessage(msg types.ChatMessageEvent) {
 		SendMessage("https://links.mvaldes.dev/dotfiles")
 	case "!test":
 		SendMessage("Test Me")
-	case "!today":
+	}
+	// Complex commands
+	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
 		log.Println("today command")
 		updateChannel(msg)
 	}
@@ -65,9 +69,12 @@ func updateChannel(action types.ChatMessageEvent) {
 		if err != nil {
 			log.Fatal("Request could not be sent to update channel")
 		}
+
+		body, err := io.ReadAll(res.Body)
+
 		if res.StatusCode != http.StatusNoContent {
 			log.Fatal("Could not update channel", res)
 		}
-		log.Println(res)
+		log.Println(string(body))
 	}
 }
