@@ -32,6 +32,7 @@ func ParseMessage(msg types.ChatMessageEvent) {
 	case "!test":
 		SendMessage("Test Me")
 	case "!today":
+		log.Println("today command")
 		updateChannel(msg)
 	}
 }
@@ -48,6 +49,7 @@ func updateChannel(action types.ChatMessageEvent) {
         "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
         "broadcaster_language":"en", 
       }`, softwareID, splitMsg[1:])
+		log.Println(payload)
 		// Send request to update channel information
 		req, err := http.NewRequest("PUT", eventURL, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
@@ -64,7 +66,8 @@ func updateChannel(action types.ChatMessageEvent) {
 			log.Fatal("Request could not be sent to update channel")
 		}
 		if res.StatusCode != http.StatusNoContent {
-			log.Fatal("Could not update channel", req)
+			log.Fatal("Could not update channel", res)
 		}
+		log.Println(res)
 	}
 }
