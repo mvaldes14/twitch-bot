@@ -19,7 +19,7 @@ func SendMessage(text string) {
 		Message:       text,
 	}
 	payload, err := json.Marshal(message)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
 	headers := utils.BuildHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
