@@ -46,16 +46,10 @@ func updateChannel(action types.ChatMessageEvent) {
 	if action.Event.BroadcasterUserName == admin {
 		// Build the new payload,
 		splitMsg := strings.Split(action.Event.Message.Text, " ")
-		eventURL := fmt.Sprintf("%v?broadcaster_id=%v", channelsEndpoint, userID)
-		payload := fmt.Sprintf(`{
-        "game_id":"%v", 
-        "title":"🚨[Devops]🚨 - %v", 
-        "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
-        "broadcaster_language":"en", 
-      }`, softwareID, splitMsg[1:])
+		payload := fmt.Sprintf(`{"game_id":"%v","title":"🚨[Devops]🚨 - %v","tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],"broadcaster_language":"en",}`, softwareID, splitMsg[1:])
 		log.Println(payload)
 		// Send request to update channel information
-		req, err := http.NewRequest("PUT", eventURL, bytes.NewBuffer([]byte(payload)))
+		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id=1792311", bytes.NewBuffer([]byte(payload)))
 		if err != nil {
 			log.Fatal("Could not form request")
 		}
