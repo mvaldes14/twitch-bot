@@ -4,7 +4,6 @@ package commands
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -46,12 +45,13 @@ func updateChannel(action types.ChatMessageEvent) {
 	if action.Event.BroadcasterUserName == admin {
 		// Build the new payload,
 		splitMsg := strings.Split(action.Event.Message.Text, " ")
+		msg := strings.Join(splitMsg[1:], " ")
 		payload := fmt.Sprintf(`{
       "game_id":"%v",
       "title":"🚨[Devops]🚨- %v",
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
       "broadcaster_language":"en"}`,
-			softwareID, splitMsg[1:])
+			softwareID, msg)
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id=1792311", bytes.NewBuffer([]byte(payload)))
 		if err != nil {
@@ -67,12 +67,8 @@ func updateChannel(action types.ChatMessageEvent) {
 		if err != nil {
 			log.Fatal("Request could not be sent to update channel")
 		}
-
-		body, err := io.ReadAll(res.Body)
-
 		if res.StatusCode != http.StatusNoContent {
 			log.Fatal("Could not update channel", res)
 		}
-		log.Println(string(body))
 	}
 }
