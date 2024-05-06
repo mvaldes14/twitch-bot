@@ -182,6 +182,8 @@ func cheerHandler(w http.ResponseWriter, r *http.Request) {
 		// send to elastic
 		msg := fmt.Sprintf("User: %v, Bits: %v", cheerEventResponse.Event.UserName, cheerEventResponse.Event.Bits)
 		logs.IndexEvent(es, cheerEventResponse.Event.UserName, msg, "cheer")
+		// send to chat
+		commands.SendMessage(fmt.Sprintf("Gracias por el sub: %v", cheerEventResponse.Event.UserName))
 	}
 
 }
