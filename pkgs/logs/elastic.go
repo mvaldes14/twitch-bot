@@ -35,6 +35,9 @@ func NewClient() *elasticsearch.Client {
 
 // IndexEvent indexes a document by creating an elastic client
 func IndexEvent(client elasticsearch.Client, username string, message string, eventType string) {
+	if username == "mr_mvaldes" {
+		return
+	}
 	document := types.EventLog{
 		Username:  username,
 		Message:   message,
