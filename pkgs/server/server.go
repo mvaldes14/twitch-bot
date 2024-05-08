@@ -67,6 +67,15 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 		}
 		payload := utils.GeneratePayload(chatSubType)
 		subscriptions.CreateSubscription(payload)
+	case "reward":
+		// Generate subscription type for subscriptions
+		chatSubType := types.SubscriptionType{
+			Name:    "reward",
+			Version: "1",
+			Type:    "channel.channel_points_custom_reward_redemption.add",
+		}
+		payload := utils.GeneratePayload(chatSubType)
+		subscriptions.CreateSubscription(payload)
 	}
 }
 
@@ -185,6 +194,33 @@ func cheerHandler(w http.ResponseWriter, r *http.Request) {
 		// send to chat
 		commands.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
 	}
+}
+
+func rewardHandler(w http.ResponseWriter, r *http.Request) {
+	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
+	if headerType == "webhook_callback_verification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var subscriptionResponse types.SubscribeEvent
+		json.Unmarshal(body, &subscriptionResponse)
+		log.Println("Responding to challenge")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(subscriptionResponse.Challenge))
+	} else if headerType == "notification" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		defer r.Body.Close()
+		var rewardEventResponse types.RewardEvent
+		json.Unmarshal(body, &rewardEventResponse)
+		// send to elastic
+		msg := fmt.Sprintf("User: %v, redeemed: %v", rewardEventResponse.Event.UserName, rewardEventResponse.Event.Reward.Title)
+		logs.IndexEvent(es, rewardEventResponse.Event.UserName, msg, "reward")
+	}
 
 }
 
@@ -197,6 +233,7 @@ func NewServer() {
 	http.HandleFunc("/follow", followHandler)
 	http.HandleFunc("/sub", subHandler)
 	http.HandleFunc("/cheer", cheerHandler)
+	http.HandleFunc("/reward", rewardHandler)
 	log.Println("Running and listening")
 	http.ListenAndServe(":3000", nil)
 }

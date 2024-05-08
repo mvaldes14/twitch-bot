@@ -24,3 +24,8 @@
         -  [x] modify dns to point to kubernetes at deploy ✅ 2024-04-28
         - [ ] Generate makefile to run the process with .env
         - [ ] Add log events for handlers (chat, follow, sub)
+- [ ] test the channel.channel_points_automatic_reward_redemption.add 
+        scopes needed: 
+            - channel:read:redemptions 
+            - channel:manage:redemptions 
+     send webhook or call to OBS
