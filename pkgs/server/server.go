@@ -220,6 +220,7 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 		// send to elastic
 		msg := fmt.Sprintf("User: %v, redeemed: %v", rewardEventResponse.Event.UserName, rewardEventResponse.Event.Reward.Title)
 		logs.IndexEvent(es, rewardEventResponse.Event.UserName, msg, "reward")
+		log.Println(string(body))
 	}
 
 }
