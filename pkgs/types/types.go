@@ -200,3 +200,40 @@ type CheerEvent struct {
 		Bits                 int    `json:"bits"`
 	} `json:"event"`
 }
+
+type RewardEvent struct {
+	Subscription struct {
+		ID        string `json:"id"`
+		Type      string `json:"type"`
+		Version   string `json:"version"`
+		Status    string `json:"status"`
+		Cost      int    `json:"cost"`
+		Condition struct {
+			BroadcasterUserID string `json:"broadcaster_user_id"`
+			RewardID          string `json:"reward_id"`
+		} `json:"condition"`
+		Transport struct {
+			Method   string `json:"method"`
+			Callback string `json:"callback"`
+		} `json:"transport"`
+		CreatedAt time.Time `json:"created_at"`
+	} `json:"subscription"`
+	Event struct {
+		ID                   string `json:"id"`
+		BroadcasterUserID    string `json:"broadcaster_user_id"`
+		BroadcasterUserLogin string `json:"broadcaster_user_login"`
+		BroadcasterUserName  string `json:"broadcaster_user_name"`
+		UserID               string `json:"user_id"`
+		UserLogin            string `json:"user_login"`
+		UserName             string `json:"user_name"`
+		UserInput            string `json:"user_input"`
+		Status               string `json:"status"`
+		Reward               struct {
+			ID     string `json:"id"`
+			Title  string `json:"title"`
+			Cost   int    `json:"cost"`
+			Prompt string `json:"prompt"`
+		} `json:"reward"`
+		RedeemedAt time.Time `json:"redeemed_at"`
+	} `json:"event"`
+}
