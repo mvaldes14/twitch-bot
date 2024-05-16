@@ -3,6 +3,7 @@ package logs
 import (
 	"crypto/tls"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -49,7 +50,9 @@ func IndexEvent(client elasticsearch.Client, username string, message string, ev
 	if err != nil {
 		log.Println(err)
 	}
+	body, _ := io.ReadAll(res.Body)
 	if res.StatusCode != 201 {
 		log.Println("Error indexing document")
+		log.Println(string(body))
 	}
 }
