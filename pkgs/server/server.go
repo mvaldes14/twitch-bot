@@ -11,6 +11,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
 	"github.com/mvaldes14/twitch-bot/pkgs/logs"
+	"github.com/mvaldes14/twitch-bot/pkgs/obs"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
@@ -220,7 +221,9 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 		// send to elastic
 		msg := fmt.Sprintf("User: %v, redeemed: %v", rewardEventResponse.Event.UserName, rewardEventResponse.Event.Reward.Title)
 		logs.IndexEvent(es, rewardEventResponse.Event.UserName, msg, "reward")
-		log.Println(string(body))
+		if rewardEventResponse.Event.Reward.Title == "Random Sound" {
+			obs.Generate("sound")
+		}
 	}
 
 }

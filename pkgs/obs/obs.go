@@ -1,4 +1,5 @@
-package main
+// Package obs creates elements in obs for the bot to use
+package obs
 
 import (
 	"fmt"
@@ -18,7 +19,8 @@ const (
 	gifPath   = "/mnt/c/Users/migue/Pictures/gifs/"
 )
 
-func main() {
+// Generate generates a random sound or gif to play in obs
+func Generate(rewardType string) {
 	client, err := goobs.New(serverURL)
 	if err != nil {
 		fmt.Println(err)
@@ -60,19 +62,22 @@ func main() {
 	// 	fmt.Println(err)
 	// }
 	// fmt.Println(t.MonitorType)
+	switch rewardType {
+	case "sound":
+		soundFile, err := randomFiles(soundPath)
+		if err != nil {
+			fmt.Println(err)
+		}
+		createInput(client, "rewardSound", "ffmpeg_source", soundFile)
 
-	soundFile, err := randomFiles(soundPath)
-	if err != nil {
-		fmt.Println(err)
+	case "gif":
+
+		gifFile, err := randomFiles(gifPath)
+		if err != nil {
+			fmt.Println(err)
+		}
+		createInput(client, "rewardGif", "image_source", gifFile)
 	}
-	createInput(client, "rewardSound", "ffmpeg_source", soundFile)
-
-	gifFile, err := randomFiles(gifPath)
-	if err != nil {
-		fmt.Println(err)
-	}
-	createInput(client, "rewardGif", "image_source", gifFile)
-
 }
 
 func randomFiles(path string) (string, error) {
@@ -122,7 +127,7 @@ func createInput(client *goobs.Client, name string, kind string, path string) {
 		setTransform(client, resp.SceneItemId, resp.InputUuid)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
 	deleteInput(client, name, resp.InputUuid)
 }
 
