@@ -15,8 +15,8 @@ import (
 
 const (
 	serverURL = "192.168.1.206:4455"
-	soundPath = "/mnt/c/Users/migue/Music/"
-	gifPath   = "/mnt/c/Users/migue/Pictures/gifs/"
+	soundPath = "/twitch/sound"
+	gifPath   = "/twitch/gifs"
 )
 
 // Generate generates a random sound or gif to play in obs
