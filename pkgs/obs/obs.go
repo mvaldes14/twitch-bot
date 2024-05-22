@@ -27,41 +27,6 @@ func Generate(rewardType string) {
 	}
 	defer client.Disconnect()
 
-	// List all inputs
-	// resp, _ := client.Inputs.GetInputList()
-	// for _, i := range resp.Inputs {
-	// 	fmt.Printf("%+v\n", i)
-	// }
-
-	// list all scenes items
-	// params := sceneitems.NewGetSceneItemListParams().WithSceneName("Coding")
-	// resp, err := client.SceneItems.GetSceneItemList(params)
-	// for _, v := range resp.SceneItems {
-	// 	fmt.Printf("index=%d, id=%d, type=%s, name=%s\n", v.SceneItemIndex, v.SceneItemID, v.SourceType, v.SourceName)
-	// }
-
-	//Get existing input settings
-	// params := inputs.NewGetInputSettingsParams().WithInputName("test")
-	// src, err := client.Inputs.GetInputSettings(params)
-	// fmt.Println(src.InputSettings)
-	// map[local_file:C:/Users/migue/Music/np.mp3 restart_on_activate:false]
-	// map[file:C:/Users/migue/Pictures/gifs/invoker.gif]
-
-	// Get existing tranform
-	// params := sceneitems.NewGetSceneItemTransformParams().
-	// 	WithSceneItemId(47).
-	// 	WithSceneName("Coding")
-	// resp, err := client.SceneItems.GetSceneItemTransform(params)
-	// fmt.Printf("%+v\n", resp.SceneItemTransform)
-	// &{Alignment:5 BoundsAlignment:0 BoundsHeight:0 BoundsType:OBS_BOUNDS_NONE BoundsWidth:0 CropBottom:0 CropLeft:0 CropRight:0 CropTop:0 Height:465 PositionX:1403 PositionY:213 Rotation:0 ScaleX:1 ScaleY:1 SourceHeight:465 SourceWidth:498 Width:498}
-
-	// Get monitor settings
-	// p := inputs.NewGetInputAudioMonitorTypeParams().WithInputName("test")
-	// t, err := client.Inputs.GetInputAudioMonitorType(p)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// fmt.Println(t.MonitorType)
 	switch rewardType {
 	case "sound":
 		soundFile, err := randomFiles(soundPath)
