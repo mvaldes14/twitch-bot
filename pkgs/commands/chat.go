@@ -4,6 +4,7 @@ package commands
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -50,7 +51,7 @@ func updateChannel(action types.ChatMessageEvent) {
       "game_id":"%v",
       "title":"🚨[Devops]🚨- %v",
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
-      "broadcaster_language":"en"}`,
+      "broadcaster_language":"es"}`,
 			softwareID, msg)
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id=1792311", bytes.NewBuffer([]byte(payload)))
@@ -67,8 +68,9 @@ func updateChannel(action types.ChatMessageEvent) {
 		if err != nil {
 			log.Fatal("Request could not be sent to update channel")
 		}
+		body, err := io.ReadAll(res.Body)
 		if res.StatusCode != http.StatusNoContent {
-			log.Fatal("Could not update channel", res)
+			log.Fatal("Could not update channel", body)
 		}
 	}
 }
