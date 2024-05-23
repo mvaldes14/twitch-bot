@@ -70,7 +70,7 @@ func updateChannel(action types.ChatMessageEvent) {
 		}
 		body, err := io.ReadAll(res.Body)
 		if res.StatusCode != http.StatusNoContent {
-			log.Fatal("Could not update channel", body)
+			log.Fatal("Could not update channel", string(body))
 		}
 	}
 }
