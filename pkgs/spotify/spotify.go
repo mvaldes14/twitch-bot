@@ -117,7 +117,6 @@ func parseSong(url string) string {
 	trackID := splitURL[len(splitURL)-1]
 	splitTrackID := strings.Split(trackID, "?")
 	trackID = splitTrackID[0]
-	log.Println("parsed song id", trackID)
 	return trackID
 }
 
@@ -128,6 +127,7 @@ func AddToPlaylist(token string, song string) {
 		songID := parseSong(song)
 		position := getPlaylist()
 		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position+1)
+		log.Println(body)
 		req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
 		if err != nil {
 			log.Fatal(err)
@@ -139,16 +139,8 @@ func AddToPlaylist(token string, song string) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err != nil {
-			log.Fatal(err)
-		}
-		if res.StatusCode != http.StatusNoContent {
-			body, _ := io.ReadAll(res.Body)
-			log.Println("Error adding song to playlist")
-			log.Println(string(body))
-		}
+		log.Println(res.StatusCode)
 	}
-	log.Println("Invalid URL")
 }
 
 func validateURL(url string) bool {
