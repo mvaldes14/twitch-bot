@@ -121,25 +121,41 @@ func parseSong(url string) string {
 	return trackID
 }
 
+// AddToPlaylist includes a song to the playlist
 func AddToPlaylist(token string, song string) {
-	addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
-	songID := parseSong(song)
-	position := getPlaylist()
-	body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position+1)
-	req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
-	if err != nil {
-		log.Fatal(err)
+	if validateURL(song) {
+		addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
+		songID := parseSong(song)
+		position := getPlaylist()
+		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position+1)
+		req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
+		if err != nil {
+			log.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		res, err := client.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		if res.StatusCode != http.StatusNoContent {
+			body, _ := io.ReadAll(res.Body)
+			log.Println("Error adding song to playlist")
+			log.Println(string(body))
+		}
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
+	log.Println("Invalid URL")
+}
+
+func validateURL(url string) bool {
+	if strings.Contains(url, "https://open.spotify.com/") {
+		return true
 	}
-	if res.StatusCode != http.StatusNoContent {
-		log.Println("Error adding song to playlist")
-	}
+	return false
 }
 
 func getPlaylist() int {
