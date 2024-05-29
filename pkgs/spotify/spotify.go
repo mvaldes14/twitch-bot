@@ -125,7 +125,7 @@ func AddToPlaylist(token string, song string) {
 	if validateURL(song) {
 		addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
 		songID := parseSong(song)
-		position := getPlaylist()
+		position := getPlaylist(token)
 		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position+1)
 		log.Println(body)
 		req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
@@ -150,11 +150,12 @@ func validateURL(url string) bool {
 	return false
 }
 
-func getPlaylist() int {
+func getPlaylist(token string) int {
 	req, err := http.NewRequest("GET", playlistURL+playlistID, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
@@ -163,5 +164,6 @@ func getPlaylist() int {
 	body, err := io.ReadAll(res.Body)
 	var playlist types.SpotifyPlaylistResponse
 	json.Unmarshal(body, &playlist)
+	log.Println(playlist)
 	return playlist.Tracks.Total
 }
