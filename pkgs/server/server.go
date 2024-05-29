@@ -230,8 +230,9 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 			spotify.NextSong(token)
 		}
 		if rewardEventResponse.Event.Reward.Title == "Add Song" {
+			spotifyURL := rewardEventResponse.Event.UserInput
 			token := spotify.RefreshToken()
-			spotify.NextSong(token)
+			spotify.AddToPlaylist(token, spotifyURL)
 		}
 	}
 

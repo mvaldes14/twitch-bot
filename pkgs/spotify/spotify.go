@@ -121,7 +121,7 @@ func parseSong(url string) string {
 	return trackID
 }
 
-func addToPlaylist(token string, song string) {
+func AddToPlaylist(token string, song string) {
 	addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
 	songID := parseSong(song)
 	position := getPlaylist()
