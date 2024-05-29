@@ -126,7 +126,7 @@ func AddToPlaylist(token string, song string) {
 		addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
 		songID := parseSong(song)
 		position := getPlaylist(token)
-		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position+1)
+		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position-1)
 		log.Println(body)
 		req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
 		if err != nil {
