@@ -2,8 +2,10 @@
 package spotify
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -15,9 +17,11 @@ import (
 )
 
 const (
-	tokenURL   = "https://accounts.spotify.com/api/token"
-	nextURL    = "https://api.spotify.com/v1/me/player/next"              // POST
-	currentURL = "https://api.spotify.com/v1/me/player/currently-playing" // GET
+	tokenURL    = "https://accounts.spotify.com/api/token"
+	nextURL     = "https://api.spotify.com/v1/me/player/next"              // POST
+	currentURL  = "https://api.spotify.com/v1/me/player/currently-playing" // GET
+	playlistID  = "72Cwey4JPR3DV3cdUS72xG"
+	playlistURL = "https://api.spotify.com/v1/playlists/" // +id GET
 )
 
 var (
@@ -106,4 +110,50 @@ func GetSong(token string) types.SpotifyCurrentlyPlaying {
 	var currentlyPlaying types.SpotifyCurrentlyPlaying
 	json.Unmarshal(body, &currentlyPlaying)
 	return currentlyPlaying
+}
+
+func parseSong(url string) string {
+	splitURL := strings.Split(url, "/")
+	trackID := splitURL[len(splitURL)-1]
+	splitTrackID := strings.Split(trackID, "?")
+	trackID = splitTrackID[0]
+	log.Println("parsed song id", trackID)
+	return trackID
+}
+
+func addToPlaylist(token string, song string) {
+	addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
+	songID := parseSong(song)
+	position := getPlaylist()
+	body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position+1)
+	req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.StatusCode != http.StatusNoContent {
+		log.Println("Error adding song to playlist")
+	}
+}
+
+func getPlaylist() int {
+	req, err := http.NewRequest("GET", playlistURL+playlistID, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	var playlist types.SpotifyPlaylistResponse
+	json.Unmarshal(body, &playlist)
+	return playlist.Tracks.Total
 }

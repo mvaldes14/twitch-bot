@@ -52,7 +52,7 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 		payload := utils.GeneratePayload(chatSubType)
 		subscriptions.CreateSubscription(payload)
 	case "subscription":
-		// Generate subscription type for subscriptions
+		// Generate subscription type for subscriptionsser
 		chatSubType := types.SubscriptionType{
 			Name:    "subscribe",
 			Version: "1",
@@ -226,6 +226,10 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 			obs.Generate("sound")
 		}
 		if rewardEventResponse.Event.Reward.Title == "Next Song" {
+			token := spotify.RefreshToken()
+			spotify.NextSong(token)
+		}
+		if rewardEventResponse.Event.Reward.Title == "Add Song" {
 			token := spotify.RefreshToken()
 			spotify.NextSong(token)
 		}
