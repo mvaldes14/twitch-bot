@@ -12,6 +12,7 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
 	"github.com/mvaldes14/twitch-bot/pkgs/logs"
 	"github.com/mvaldes14/twitch-bot/pkgs/obs"
+	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
@@ -51,7 +52,7 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 		payload := utils.GeneratePayload(chatSubType)
 		subscriptions.CreateSubscription(payload)
 	case "subscription":
-		// Generate subscription type for subscriptions
+		// Generate subscription type for subscriptionsser
 		chatSubType := types.SubscriptionType{
 			Name:    "subscribe",
 			Version: "1",
@@ -223,6 +224,15 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 		logs.IndexEvent(es, rewardEventResponse.Event.UserName, msg, "reward")
 		if rewardEventResponse.Event.Reward.Title == "Random Sound" {
 			obs.Generate("sound")
+		}
+		if rewardEventResponse.Event.Reward.Title == "Next Song" {
+			token := spotify.RefreshToken()
+			spotify.NextSong(token)
+		}
+		if rewardEventResponse.Event.Reward.Title == "Add Song" {
+			spotifyURL := rewardEventResponse.Event.UserInput
+			token := spotify.RefreshToken()
+			spotify.AddToPlaylist(token, spotifyURL)
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
@@ -32,6 +33,11 @@ func ParseMessage(msg types.ChatMessageEvent) {
 		SendMessage("https://links.mvaldes.dev/dotfiles")
 	case "!test":
 		SendMessage("Test Me")
+	case "!song":
+		token := spotify.RefreshToken()
+		song := spotify.GetSong(token)
+		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
+		SendMessage(msg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
