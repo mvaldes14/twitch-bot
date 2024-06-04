@@ -17,11 +17,13 @@ import (
 )
 
 const (
-	tokenURL    = "https://accounts.spotify.com/api/token"
-	nextURL     = "https://api.spotify.com/v1/me/player/next"              // POST
-	currentURL  = "https://api.spotify.com/v1/me/player/currently-playing" // GET
-	playlistID  = "72Cwey4JPR3DV3cdUS72xG"
-	playlistURL = "https://api.spotify.com/v1/playlists/" // +id GET
+	tokenURL          = "https://accounts.spotify.com/api/token"
+	nextURL           = "https://api.spotify.com/v1/me/player/next"              // POST
+	currentURL        = "https://api.spotify.com/v1/me/player/currently-playing" // GET
+	playlistID        = "72Cwey4JPR3DV3cdUS72xG"
+	playlistURL       = "https://api.spotify.com/v1/playlists/" // +id GET
+	getPlaylistURL    = "https://api.spotify.com/v1/playlists/" // +id/tracks GET
+	deletePlaylistURL = "https://api.spotify.com/v1/playlists/" // +id/tracks DELETE
 )
 
 var (
@@ -165,4 +167,61 @@ func getPlaylist(token string) int {
 	var playlist types.SpotifyPlaylistResponse
 	json.Unmarshal(body, &playlist)
 	return playlist.Tracks.Total
+}
+
+func getSongsPlaylist(playlistID, token string) []string {
+	req, err := http.NewRequest("GET", getPlaylistURL+playlistID+"/tracks?", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var playstResponse types.SpotifyPlaylistItemList
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	json.Unmarshal(body, &playstResponse)
+
+	var songIDs []string
+	for _, item := range playstResponse.Items {
+		songIDs = append(songIDs, item.Track.ID)
+	}
+	return songIDs
+}
+
+// DeleteSongPlaylist wipes the playlist to start fresh
+func DeleteSongPlaylist(token string) {
+	songs := getSongsPlaylist(playlistID, token)
+	formatSongs := generateURISongs(songs)
+	body := fmt.Sprintf("{\"tracks\":[%v]}", strings.Join(formatSongs, ","))
+	req, err := http.NewRequest("DELETE", deletePlaylistURL+playlistID+"tracks", bytes.NewBuffer([]byte(body)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		log.Println(string(body))
+	}
+}
+
+func generateURISongs(songs []string) []string {
+	var songStructs []string
+	for _, song := range songs {
+		songStructs = append(songStructs, fmt.Sprintf("{\"uri\":\"spotify:track:%v\"}", song))
+	}
+	return songStructs
 }
