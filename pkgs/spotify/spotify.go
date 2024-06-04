@@ -201,13 +201,13 @@ func DeleteSongPlaylist(token string) {
 	songs := getSongsPlaylist(playlistID, token)
 	formatSongs := generateURISongs(songs)
 	body := fmt.Sprintf("{\"tracks\":[%v]}", strings.Join(formatSongs, ","))
+	log.Println(body)
 	req, err := http.NewRequest("DELETE", deletePlaylistURL+playlistID+"tracks", bytes.NewBuffer([]byte(body)))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
