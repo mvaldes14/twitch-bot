@@ -201,7 +201,6 @@ func DeleteSongPlaylist(token string) {
 	songs := getSongsPlaylist(playlistID, token)
 	formatSongs := generateURISongs(songs)
 	body := fmt.Sprintf("{\"tracks\":[%v]}", strings.Join(formatSongs, ","))
-	log.Println(body)
 	req, err := http.NewRequest("DELETE", deletePlaylistURL+playlistID+"tracks", bytes.NewBuffer([]byte(body)))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -214,10 +213,7 @@ func DeleteSongPlaylist(token string) {
 		log.Fatal(err)
 	}
 	if res.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
+		body, _ := io.ReadAll(res.Body)
 		log.Println(string(body))
 	}
 }
