@@ -236,7 +236,7 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
 			token := spotify.RefreshToken()
-			spotify.DeletePlaylist(token)
+			spotify.DeleteSongPlaylist(token)
 		}
 
 	}
