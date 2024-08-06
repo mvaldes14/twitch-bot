@@ -238,9 +238,7 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 			token := spotify.RefreshToken()
 			spotify.DeleteSongPlaylist(token)
 		}
-
 	}
-
 }
 
 // NewServer creates the http server
