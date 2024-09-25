@@ -8,17 +8,13 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
-	"github.com/mvaldes14/twitch-bot/pkgs/logs"
 	"github.com/mvaldes14/twitch-bot/pkgs/obs"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
-
-var es elasticsearch.Client = *logs.NewClient()
 
 func deleteHandler(_ http.ResponseWriter, _ *http.Request) {
 	subsList := subscriptions.GetSubscriptions()
@@ -27,6 +23,11 @@ func deleteHandler(_ http.ResponseWriter, _ *http.Request) {
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Write([]byte("msg: OK\n"))
+}
+
+func listHandler(_ http.ResponseWriter, _ *http.Request) {
+	subsList := subscriptions.GetSubscriptions()
+	log.Println(subsList)
 }
 
 func createHandler(_ http.ResponseWriter, r *http.Request) {
@@ -81,7 +82,7 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func chatHandler(w http.ResponseWriter, r *http.Request) {
+func handleHeaders(w http.ResponseWriter, r *http.Request) {
 	eventHeaderType := r.Header.Get("Twitch-Eventsub-Message-Type")
 	if eventHeaderType == "webhook_callback_verification" {
 		log.Println("Responding to challenge")
@@ -94,150 +95,86 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(body, &challengeResponse)
 		w.Header().Add("Content-Type", "plain/text")
 		w.Write([]byte(challengeResponse.Challenge))
-	} else if eventHeaderType == "notification" {
-		var chatEvent types.ChatMessageEvent
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		json.Unmarshal(body, &chatEvent)
-		// Send to elastic
-		logs.IndexEvent(es, chatEvent.Event.ChatterUserName, chatEvent.Event.Message.Text, "chat")
-		// Send to parser to respond
-		commands.ParseMessage(chatEvent)
-	} else {
-		fmt.Print("Unsupported request type")
+		log.Println("Response sent")
 	}
+}
+
+func chatHandler(w http.ResponseWriter, r *http.Request) {
+	handleHeaders(w, r)
+	var chatEvent types.ChatMessageEvent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	defer r.Body.Close()
+	json.Unmarshal(body, &chatEvent)
+	// Send to parser to respond
+	commands.ParseMessage(chatEvent)
 }
 
 func followHandler(w http.ResponseWriter, r *http.Request) {
-	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
-	if headerType == "webhook_callback_verification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var subscriptionResponse types.SubscribeEvent
-		json.Unmarshal(body, &subscriptionResponse)
-		log.Println("Responding to challenge")
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(subscriptionResponse.Challenge))
-	} else if headerType == "notification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var followEventResponse types.FollowEvent
-		json.Unmarshal(body, &followEventResponse)
-		// send to elastic
-		msg := fmt.Sprintf("User: %v, followed on: %v", followEventResponse.Event.UserName, followEventResponse.Event.FollowedAt)
-		logs.IndexEvent(es, followEventResponse.Event.UserName, msg, "follow")
-		// Send to chat
-		commands.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
+	handleHeaders(w, r)
+	var followEventResponse types.FollowEvent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return
 	}
+	defer r.Body.Close()
+	json.Unmarshal(body, &followEventResponse)
+	// Send to chat
+	commands.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
 }
 
 func subHandler(w http.ResponseWriter, r *http.Request) {
-	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
-	if headerType == "webhook_callback_verification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var subscriptionResponse types.SubscribeEvent
-		json.Unmarshal(body, &subscriptionResponse)
-		log.Println("Responding to challenge")
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(subscriptionResponse.Challenge))
-	} else if headerType == "notification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var subEventResponse types.SubscriptionEvent
-		json.Unmarshal(body, &subEventResponse)
-		// send to elastic
-		msg := fmt.Sprintf("User: %v, Tier: %v", subEventResponse.Event.UserName, subEventResponse.Event.Tier)
-		logs.IndexEvent(es, subEventResponse.Event.UserName, msg, "sub")
-		// send to chat
-		commands.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
+	handleHeaders(w, r)
+	var subEventResponse types.SubscriptionEvent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return
 	}
+	defer r.Body.Close()
+	json.Unmarshal(body, &subEventResponse)
+	// send to chat
+	commands.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
 }
 
 func cheerHandler(w http.ResponseWriter, r *http.Request) {
-	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
-	if headerType == "webhook_callback_verification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var subscriptionResponse types.SubscribeEvent
-		json.Unmarshal(body, &subscriptionResponse)
-		fmt.Println("Responding to challenge")
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(subscriptionResponse.Challenge))
-	} else if headerType == "notification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var cheerEventResponse types.CheerEvent
-		json.Unmarshal(body, &cheerEventResponse)
-		// send to elastic
-		msg := fmt.Sprintf("User: %v, Bits: %v", cheerEventResponse.Event.UserName, cheerEventResponse.Event.Bits)
-		logs.IndexEvent(es, cheerEventResponse.Event.UserName, msg, "cheer")
-		// send to chat
-		commands.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
+	handleHeaders(w, r)
+	var cheerEventResponse types.CheerEvent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return
 	}
+	defer r.Body.Close()
+	json.Unmarshal(body, &cheerEventResponse)
+	// send to chat
+	commands.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
 }
 
 func rewardHandler(w http.ResponseWriter, r *http.Request) {
-	headerType := r.Header.Get("Twitch-Eventsub-Message-Type")
-	if headerType == "webhook_callback_verification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var subscriptionResponse types.SubscribeEvent
-		json.Unmarshal(body, &subscriptionResponse)
-		log.Println("Responding to challenge")
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(subscriptionResponse.Challenge))
-	} else if headerType == "notification" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return
-		}
-		defer r.Body.Close()
-		var rewardEventResponse types.RewardEvent
-		json.Unmarshal(body, &rewardEventResponse)
-		// send to elastic
-		msg := fmt.Sprintf("User: %v, redeemed: %v", rewardEventResponse.Event.UserName, rewardEventResponse.Event.Reward.Title)
-		logs.IndexEvent(es, rewardEventResponse.Event.UserName, msg, "reward")
-		if rewardEventResponse.Event.Reward.Title == "Random Sound" {
-			obs.Generate("sound")
-		}
-		if rewardEventResponse.Event.Reward.Title == "Next Song" {
-			token := spotify.RefreshToken()
-			spotify.NextSong(token)
-		}
-		if rewardEventResponse.Event.Reward.Title == "Add Song" {
-			spotifyURL := rewardEventResponse.Event.UserInput
-			token := spotify.RefreshToken()
-			spotify.AddToPlaylist(token, spotifyURL)
-		}
-		if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-			token := spotify.RefreshToken()
-			spotify.DeleteSongPlaylist(token)
-		}
+	handleHeaders(w, r)
+	var rewardEventResponse types.RewardEvent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	defer r.Body.Close()
+	json.Unmarshal(body, &rewardEventResponse)
+	if rewardEventResponse.Event.Reward.Title == "Random Sound" {
+		obs.Generate("sound")
+	}
+	if rewardEventResponse.Event.Reward.Title == "Next Song" {
+		token := spotify.RefreshToken()
+		spotify.NextSong(token)
+	}
+	if rewardEventResponse.Event.Reward.Title == "Add Song" {
+		spotifyURL := rewardEventResponse.Event.UserInput
+		token := spotify.RefreshToken()
+		spotify.AddToPlaylist(token, spotifyURL)
+	}
+	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
+		token := spotify.RefreshToken()
+		spotify.DeleteSongPlaylist(token)
 	}
 }
 
@@ -245,6 +182,7 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 func NewServer() {
 	http.HandleFunc("/create", createHandler)
 	http.HandleFunc("/delete", deleteHandler)
+	http.HandleFunc("/list", listHandler)
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/chat", chatHandler)
 	http.HandleFunc("/follow", followHandler)
