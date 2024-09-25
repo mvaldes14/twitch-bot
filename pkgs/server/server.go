@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
@@ -15,6 +14,8 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
+
+var logger = utils.Logger()
 
 func deleteHandler(_ http.ResponseWriter, _ *http.Request) {
 	subsList := subscriptions.GetSubscriptions()
@@ -27,7 +28,10 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 
 func listHandler(_ http.ResponseWriter, _ *http.Request) {
 	subsList := subscriptions.GetSubscriptions()
-	log.Println(subsList)
+	logger.Info("Current Subscription List")
+	for _, sub := range subsList.Data {
+		logger.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
+	}
 }
 
 func createHandler(_ http.ResponseWriter, r *http.Request) {
@@ -85,7 +89,7 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 func handleHeaders(w http.ResponseWriter, r *http.Request) {
 	eventHeaderType := r.Header.Get("Twitch-Eventsub-Message-Type")
 	if eventHeaderType == "webhook_callback_verification" {
-		log.Println("Responding to challenge")
+		logger.Info("Responding to challenge")
 		var challengeResponse types.SubscribeEvent
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -95,7 +99,7 @@ func handleHeaders(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(body, &challengeResponse)
 		w.Header().Add("Content-Type", "plain/text")
 		w.Write([]byte(challengeResponse.Challenge))
-		log.Println("Response sent")
+		logger.Info("Response sent")
 	}
 }
 
@@ -189,6 +193,6 @@ func NewServer() {
 	http.HandleFunc("/sub", subHandler)
 	http.HandleFunc("/cheer", cheerHandler)
 	http.HandleFunc("/reward", rewardHandler)
-	log.Println("Running and listening")
+	logger.Info("Running and listening")
 	http.ListenAndServe(":3000", nil)
 }

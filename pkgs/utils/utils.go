@@ -3,6 +3,7 @@ package utils
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -14,6 +15,10 @@ const (
 	secret      = "superSecret123"
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
+
+func Logger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stdout, nil))
+}
 
 // BuildHeaders Returns the secrets from env variables to build headers for requests
 func BuildHeaders() types.RequestHeader {

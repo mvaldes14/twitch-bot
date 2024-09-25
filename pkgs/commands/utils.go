@@ -4,12 +4,13 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
+
+var logger = utils.Logger()
 
 // SendMessage Allows you to send a message to the chat room
 func SendMessage(text string) {
@@ -34,6 +35,6 @@ func SendMessage(text string) {
 		return
 	}
 	if res.StatusCode != 200 {
-		log.Println("Error sending message to chat")
+		logger.Error("Error sending message to chat")
 	}
 }
