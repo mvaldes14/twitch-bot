@@ -16,7 +16,7 @@ const (
 	messageEndpoint  = "https://api.twitch.tv/helix/chat/messages"
 	channelsEndpoint = "https://api.twitch.tv/helix/channels"
 	userID           = "1792311"
-	admin            = "mr_mvaldes"
+	admin            = "mvaldes_"
 	softwareID       = 1469308723
 )
 
