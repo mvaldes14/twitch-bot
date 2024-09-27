@@ -4,7 +4,6 @@ package commands
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
@@ -20,6 +19,8 @@ const (
 	admin            = "mr_mvaldes"
 	softwareID       = 1469308723
 )
+
+var logger = utils.Logger()
 
 // ParseMessage Parses the incoming messages from stream
 func ParseMessage(msg types.ChatMessageEvent) {
@@ -45,7 +46,6 @@ func ParseMessage(msg types.ChatMessageEvent) {
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
-		log.Println("today command")
 		updateChannel(msg)
 	}
 }
@@ -65,7 +65,7 @@ func updateChannel(action types.ChatMessageEvent) {
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id=1792311", bytes.NewBuffer([]byte(payload)))
 		if err != nil {
-			log.Fatal("Could not form request")
+			logger.Error("Could not form request to update channel info")
 		}
 		headers := utils.BuildHeaders()
 		req.Header.Set("Content-Type", "application/json")
@@ -75,10 +75,10 @@ func updateChannel(action types.ChatMessageEvent) {
 		client := &http.Client{}
 		res, err := client.Do(req)
 		if err != nil {
-			log.Fatal("Request could not be sent to update channel")
+			logger.Error("Request could not be sent to update channel")
 		}
 		if res.StatusCode != http.StatusNoContent {
-			log.Fatal("Could not update channel", res)
+			logger.Error("Could not update channel", res)
 		}
 	}
 }

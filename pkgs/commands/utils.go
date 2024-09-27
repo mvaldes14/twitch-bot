@@ -10,8 +10,6 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
 
-var logger = utils.Logger()
-
 // SendMessage Allows you to send a message to the chat room
 func SendMessage(text string) {
 	message := types.ChatMessage{

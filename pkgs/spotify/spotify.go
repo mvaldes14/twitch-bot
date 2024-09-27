@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,18 +44,18 @@ func RefreshToken() string {
 
 	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Generating Request for token refresh", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Basic "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Sending Request for token refresh", err)
 	}
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error from token refresh request", err)
 	}
 	var t types.SpotifyTokenResponse
 	json.Unmarshal(resBody, &t)
@@ -68,13 +67,13 @@ func RefreshToken() string {
 func NextSong(token string) {
 	req, err := http.NewRequest("POST", nextURL, nil)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Generating Request for next song", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Sending Request for next song", err)
 	}
 	// Token is valid
 	if res.StatusCode == http.StatusNoContent {
@@ -92,13 +91,13 @@ func NextSong(token string) {
 func GetSong(token string) types.SpotifyCurrentlyPlaying {
 	req, err := http.NewRequest("GET", currentURL, nil)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Generating Request for get song", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Sending Request for get song", err)
 	}
 	// Token is valid
 	if res.StatusCode == http.StatusOK {
@@ -176,18 +175,18 @@ func getSongsPlaylist(playlistID, token string) []string {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Generating Request for get song playlist", err)
 	}
 
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Sending Request for get song playlist", err)
 	}
 	var playstResponse types.SpotifyPlaylistItemList
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error parsing body from get song playlist", err)
 	}
 	json.Unmarshal(body, &playstResponse)
 
@@ -207,12 +206,12 @@ func DeleteSongPlaylist(token string) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Generating Request for delete playlist", err)
 	}
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error(err)
+		logger.Error("Error Sending Request for delete playlist", err)
 	}
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(res.Body)
