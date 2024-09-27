@@ -46,6 +46,7 @@ func ParseMessage(msg types.ChatMessageEvent) {
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
+		logger.Info("Today command")
 		updateChannel(msg)
 	}
 }
