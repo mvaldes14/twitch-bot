@@ -62,8 +62,9 @@ func updateChannel(action types.ChatMessageEvent) {
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
       "broadcaster_language":"en"}`,
 			softwareID, msg)
+		logger.Info("Today Command Payload:", payload)
 		// Send request to update channel information
-		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id=1792311", bytes.NewBuffer([]byte(payload)))
+		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
 			logger.Error("Could not form request to update channel info")
 		}
