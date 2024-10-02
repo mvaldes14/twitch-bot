@@ -4,6 +4,7 @@ package commands
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -52,6 +53,7 @@ func ParseMessage(msg types.ChatMessageEvent) {
 }
 
 func updateChannel(action types.ChatMessageEvent) {
+	logger.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
 	if action.Event.BroadcasterUserName == admin {
 		// Build the new payload,
@@ -60,10 +62,10 @@ func updateChannel(action types.ChatMessageEvent) {
 		payload := fmt.Sprintf(`{
       "game_id":"%v",
       "title":"🚨[Devops]🚨- %v",
-      "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
-      "broadcaster_language":"en"}`,
+      "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
+      "broadcaster_language":"es"}`,
 			softwareID, msg)
-		logger.Info("Today Command Payload:", payload)
+		logger.Info("Today Command Payload", slog.String("Payload", payload))
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
@@ -80,7 +82,7 @@ func updateChannel(action types.ChatMessageEvent) {
 			logger.Error("Request could not be sent to update channel")
 		}
 		if res.StatusCode != http.StatusNoContent {
-			logger.Error("Could not update channel", res)
+			logger.Error("Could not update channel", slog.Int("error", res.StatusCode))
 		}
 	}
 }
