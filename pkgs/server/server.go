@@ -182,6 +182,12 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func testHandler(w http.ResponseWriter, r *http.Request) {
+	logger.Info("Test")
+	test := utils.GenerateNewToken()
+	utils.StoreNewTokens(test)
+}
+
 // NewServer creates the http server
 func NewServer() {
 	http.HandleFunc("/create", createHandler)
@@ -193,6 +199,7 @@ func NewServer() {
 	http.HandleFunc("/sub", subHandler)
 	http.HandleFunc("/cheer", cheerHandler)
 	http.HandleFunc("/reward", rewardHandler)
+	http.HandleFunc("/test", testHandler)
 	logger.Info("Running and listening")
 	http.ListenAndServe(":3000", nil)
 }

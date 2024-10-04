@@ -71,9 +71,10 @@ func updateChannel(action types.ChatMessageEvent) {
 		if err != nil {
 			logger.Error("Could not form request to update channel info")
 		}
-		headers := utils.BuildHeaders()
+		headers := utils.BuildSecretHeaders()
+		userToken := utils.GetUserToken()
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+headers.Token)
+		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
 
 		client := &http.Client{}
@@ -83,6 +84,8 @@ func updateChannel(action types.ChatMessageEvent) {
 		}
 		if res.StatusCode != http.StatusNoContent {
 			logger.Error("Could not update channel", slog.Int("error", res.StatusCode))
+			// Attempt to refresh the token
+
 		}
 	}
 }

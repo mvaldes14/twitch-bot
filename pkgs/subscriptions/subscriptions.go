@@ -24,7 +24,7 @@ func CreateSubscription(payload string) *http.Response {
 		return nil
 	}
 	// Add key headers to request
-	headers := utils.BuildHeaders()
+	headers := utils.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -47,7 +47,7 @@ func CreateSubscription(payload string) *http.Response {
 // GetSubscriptions Retrieves all subscriptions for the application
 func GetSubscriptions() types.ValidateSubscription {
 	req, err := http.NewRequest("GET", url, nil)
-	headers := utils.BuildHeaders()
+	headers := utils.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -71,7 +71,7 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 			if err != nil {
 				return
 			}
-			headers := utils.BuildHeaders()
+			headers := utils.BuildSecretHeaders()
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
