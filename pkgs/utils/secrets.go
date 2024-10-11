@@ -67,5 +67,4 @@ func StoreNewTokens(tokens types.TwitchRefreshResponse) bool {
 		logger.Error("Error", "Making Execution", req.URL, "Failed:", err)
 	}
 	return response.Success
-
 }
