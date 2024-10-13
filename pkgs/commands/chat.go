@@ -82,7 +82,7 @@ func updateChannel(action types.ChatMessageEvent) {
 			if err != nil {
 				logger.Error("Request could not be sent to update channel")
 			}
-			if res.StatusCode != http.StatusNoContent {
+			if res.StatusCode != http.StatusBadRequest {
 				logger.Error("Could not update channel", slog.Int("error", res.StatusCode))
 				// Attempt to refresh the token
 				token := utils.GenerateNewToken()
