@@ -2,6 +2,13 @@ package types
 
 import "time"
 
+type RequestJson struct {
+	Method  string
+	URL     string
+	Payload string
+	Headers map[string]string
+}
+
 type EventLog struct {
 	Username  string    `json:"username"`
 	Message   string    `json:"message"`
@@ -596,4 +603,19 @@ type SpotifyPlaylistItemList struct {
 			IsLocal     bool   `json:"is_local"`
 		} `json:"track"`
 	} `json:"items"`
+}
+
+type TwitchRefreshResponse struct {
+	AccessToken  string   `json:"access_token"`
+	RefreshToken string   `json:"refresh_token"`
+	Scope        []string `json:"scope"`
+	TokenType    string   `json:"token_type"`
+}
+
+type DopplerSecretUpdate struct {
+	Messages []string `json:"messages"`
+	Data     struct {
+		Name string `json:"name"`
+	} `json:"data"`
+	Success bool `json:"success"`
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -14,6 +13,8 @@ import (
 )
 
 const url = "https://api.twitch.tv/helix/eventsub/subscriptions"
+
+var logger = utils.Logger()
 
 // CreateSubscription Generates  a new subscription on an event type
 func CreateSubscription(payload string) *http.Response {
@@ -23,37 +24,37 @@ func CreateSubscription(payload string) *http.Response {
 		return nil
 	}
 	// Add key headers to request
-	headers := utils.BuildHeaders()
+	headers := utils.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	log.Println("Sending request")
+	logger.Info("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("Error sending request:", err)
+		logger.Error("Error sending request:", err)
 		return nil
 	}
 	defer resp.Body.Close()
-	log.Println("Subscription response:", resp.StatusCode)
+	logger.Info("Subscription response:", resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	log.Println(string(body))
+	logger.Info(string(body))
 	return resp
 }
 
 // GetSubscriptions Retrieves all subscriptions for the application
 func GetSubscriptions() types.ValidateSubscription {
 	req, err := http.NewRequest("GET", url, nil)
-	headers := utils.BuildHeaders()
+	headers := utils.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("Error sending request:", err)
+		logger.Error("Error sending request:", err)
 	}
 	body, err := io.ReadAll(resp.Body)
 	var subscriptionList types.ValidateSubscription
@@ -70,17 +71,17 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 			if err != nil {
 				return
 			}
-			headers := utils.BuildHeaders()
+			headers := utils.BuildSecretHeaders()
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
-				log.Println("Subscription deleted:", sub.ID)
+				logger.Info("Subscription deleted:" + sub.ID)
 			}
 		}
 	} else {
-		log.Println("No subscriptions to delete")
+		logger.Info("No subscriptions to delete")
 	}
 }

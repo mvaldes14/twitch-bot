@@ -2,7 +2,12 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -15,8 +20,36 @@ const (
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
-// BuildHeaders Returns the secrets from env variables to build headers for requests
-func BuildHeaders() types.RequestHeader {
+// Logger Returns a logger in json for the bot
+func Logger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stdout, nil))
+}
+
+// MakeRequestMarshallJson receives a request and marshals the response into a struct
+func MakeRequestMarshallJson(r *types.RequestJson, jsonType interface{}) error {
+	req, err := http.NewRequest(r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
+	if err != nil {
+		return nil
+	}
+	for k, v := range r.Headers {
+		req.Header.Set(k, v)
+	}
+	// Create an HTTP client
+	client := &http.Client{}
+	// Send the request and get the response
+	logger.Info("Sending request")
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("Error", "Sending request:", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	return json.Unmarshal(body, jsonType)
+}
+
+// BuildSecretHeaders Returns the secrets from env variables to build headers for requests
+func BuildSecretHeaders() types.RequestHeader {
 	token := os.Getenv("TWITCH_TOKEN")
 	clientID := os.Getenv("TWITCH_CLIENT_ID")
 	return types.RequestHeader{

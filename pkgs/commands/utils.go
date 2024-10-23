@@ -4,7 +4,6 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -20,7 +19,7 @@ func SendMessage(text string) {
 	}
 	payload, err := json.Marshal(message)
 	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
-	headers := utils.BuildHeaders()
+	headers := utils.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -34,6 +33,6 @@ func SendMessage(text string) {
 		return
 	}
 	if res.StatusCode != 200 {
-		log.Println("Error sending message to chat")
+		logger.Error("Error sending message to chat")
 	}
 }

@@ -9,14 +9,14 @@
       perSystem = { config, self', inputs', pkgs, system, ... }:
         let
           name = "twitch-bot";
-          vendorHash = "sha256-RkEW49MTqfWP7n9q/72SGffbzMEwv2sBoW+1to25Vvo=";
+          vendorHash = "sha256-QF+4UZsc7V8togJNUUV3f154lXNznRzZTUYTPOSR4ds=";
           version = "0.1.0";
         in
         {
-           devShells = {
+          devShells = {
             default = pkgs.mkShell {
               inputsFrom = [ self'.packages.default ];
-              nativeBuildInputs = [ pkgs.act];
+              nativeBuildInputs = [ pkgs.act ];
             };
           };
           packages = {

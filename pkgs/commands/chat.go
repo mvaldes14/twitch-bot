@@ -4,7 +4,7 @@ package commands
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -17,9 +17,10 @@ const (
 	messageEndpoint  = "https://api.twitch.tv/helix/chat/messages"
 	channelsEndpoint = "https://api.twitch.tv/helix/channels"
 	userID           = "1792311"
-	admin            = "mr_mvaldes"
 	softwareID       = 1469308723
 )
+
+var logger = utils.Logger()
 
 // ParseMessage Parses the incoming messages from stream
 func ParseMessage(msg types.ChatMessageEvent) {
@@ -45,40 +46,51 @@ func ParseMessage(msg types.ChatMessageEvent) {
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
-		log.Println("today command")
+		logger.Info("Today command")
 		updateChannel(msg)
 	}
 }
 
 func updateChannel(action types.ChatMessageEvent) {
+	logger.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
-	if action.Event.BroadcasterUserName == admin {
-		// Build the new payload,
+	if action.Event.BroadcasterUserID == userID {
+		// Build the new payload ,
 		splitMsg := strings.Split(action.Event.Message.Text, " ")
 		msg := strings.Join(splitMsg[1:], " ")
 		payload := fmt.Sprintf(`{
       "game_id":"%v",
       "title":"🚨[Devops]🚨- %v",
-      "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix"],
-      "broadcaster_language":"en"}`,
+      "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
+      "broadcaster_language":"es"}`,
 			softwareID, msg)
+		logger.Info("Today Command Payload", slog.String("Payload", payload))
 		// Send request to update channel information
-		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id=1792311", bytes.NewBuffer([]byte(payload)))
+		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
-			log.Fatal("Could not form request")
+			logger.Error("Could not form request to update channel info")
 		}
-		headers := utils.BuildHeaders()
+		headers := utils.BuildSecretHeaders()
+		userToken := utils.GetUserToken()
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+headers.Token)
+		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
 
-		client := &http.Client{}
-		res, err := client.Do(req)
-		if err != nil {
-			log.Fatal("Request could not be sent to update channel")
-		}
-		if res.StatusCode != http.StatusNoContent {
-			log.Fatal("Could not update channel", res)
+		for {
+			client := &http.Client{}
+			res, err := client.Do(req)
+			if err != nil {
+				logger.Error("Request could not be sent to update channel")
+			}
+			if res.StatusCode != http.StatusBadRequest {
+				logger.Error("Could not update channel", slog.Int("error", res.StatusCode))
+				// Attempt to refresh the token
+				token := utils.GenerateNewToken()
+				utils.StoreNewTokens(token)
+			}
+			if res.StatusCode == http.StatusOK {
+				continue
+			}
 		}
 	}
 }
