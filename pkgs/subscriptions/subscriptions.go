@@ -34,13 +34,13 @@ func CreateSubscription(payload string) *http.Response {
 	logger.Info("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error sending request:", err)
+		logger.Error("Error sending request:", "caused by", err)
 		return nil
 	}
 	defer resp.Body.Close()
-	logger.Info("Subscription response:", resp.StatusCode)
+	logger.Info("Subscription response:", "info", resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	logger.Info(string(body))
+	logger.Info("response", "message", string(body))
 	return resp
 }
 
@@ -54,7 +54,7 @@ func GetSubscriptions() types.ValidateSubscription {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error sending request:", err)
+		logger.Error("Error sending request:", "caused by", err)
 	}
 	body, err := io.ReadAll(resp.Body)
 	var subscriptionList types.ValidateSubscription

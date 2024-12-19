@@ -35,6 +35,7 @@ func middleWareRoute(next http.Handler) http.Handler {
 		if r.Header.Get("Twitch-Eventsub-Message-Type ") == "webhook_callback_verification" {
 			respondToChallenge(w, r)
 		} else {
+			logger.Info("No webhook challenge", "forwarding request", next)
 			next.ServeHTTP(w, r)
 		}
 	})
