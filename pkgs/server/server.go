@@ -26,8 +26,8 @@ func NewServer() {
 
 	srv := &http.Server{
 		Addr:    ":3000",
-		Handler: mux,
+		Handler: middleWareRoute(mux),
 	}
 	err := srv.ListenAndServe()
-	logger.Error("FATAL", err)
+	logger.Error("FATAL", "Error starting the server", err)
 }
