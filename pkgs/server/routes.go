@@ -190,6 +190,7 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // testHandler is used to test if the bot is responding to messages
+// this is purely for me to test new functionality.
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Test")
 	test := utils.GenerateNewToken()
