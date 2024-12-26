@@ -35,7 +35,6 @@ func middleWareRoute(next http.Handler) http.Handler {
 		if r.Header.Get("Twitch-Eventsub-Message-Type ") == "webhook_callback_verification" {
 			respondToChallenge(w, r)
 		} else {
-			logger.Info("No webhook challenge", "forwarding request", next)
 			next.ServeHTTP(w, r)
 		}
 	})
@@ -53,11 +52,13 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // listHandler returns the current subscription list
-func listHandler(_ http.ResponseWriter, _ *http.Request) {
+func listHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList := subscriptions.GetSubscriptions()
 	logger.Info("Current Subscription List")
 	for _, sub := range subsList.Data {
 		logger.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
+		subItem := fmt.Sprintf("Status: %s, Type: %s\n", sub.Status, sub.Type)
+		w.Write([]byte(subItem))
 	}
 }
 
@@ -189,6 +190,7 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // testHandler is used to test if the bot is responding to messages
+// this is purely for me to test new functionality.
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Test")
 	test := utils.GenerateNewToken()
