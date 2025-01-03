@@ -40,7 +40,7 @@ func CreateSubscription(payload string) *http.Response {
 	defer resp.Body.Close()
 	logger.Info("Subscription response:", "info", resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	logger.Info("response", "message", string(body))
+	logger.Info("Subscription", "message", string(body))
 	return resp
 }
 
