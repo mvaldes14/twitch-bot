@@ -62,6 +62,9 @@ func BuildSecretHeaders() types.RequestHeader {
 func GeneratePayload(subType types.SubscriptionType) string {
 	var payload string
 
+	// TODO: Redo this with a generic payload, its repetitive
+	// Also include the callback endpoint to form the webhook
+
 	switch subType.Name {
 	case "chat":
 		payload = fmt.Sprintf(`{
@@ -130,6 +133,19 @@ func GeneratePayload(subType types.SubscriptionType) string {
       "transport": {
           "method": "webhook",
           "callback": "%v/reward",
+          "secret": "%v"
+      }
+    }`, subType.Type, subType.Version, userID, callbackURL, secret)
+	case "stream":
+		payload = fmt.Sprintf(`{
+      "type": "%v",
+      "version": "%v",
+      "condition": {
+          "broadcaster_user_id": "%v"
+      },
+      "transport": {
+          "method": "webhook",
+          "callback": "%v/stream",
           "secret": "%v"
       }
     }`, subType.Type, subType.Version, userID, callbackURL, secret)

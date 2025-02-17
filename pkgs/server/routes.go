@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
+	"github.com/mvaldes14/twitch-bot/pkgs/discord"
 	"github.com/mvaldes14/twitch-bot/pkgs/obs"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
@@ -107,7 +108,16 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 		}
 		payload := utils.GeneratePayload(subTypeForm)
 		subscriptions.CreateSubscription(payload)
+	case "stream":
+		subTypeForm := types.SubscriptionType{
+			Name:    "stream",
+			Version: "1",
+			Type:    "stream.online",
+		}
+		payload := utils.GeneratePayload(subTypeForm)
+		subscriptions.CreateSubscription(payload)
 	}
+
 }
 
 // chatHandler responds to chat messages
@@ -195,4 +205,11 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Test")
 	test := utils.GenerateNewToken()
 	utils.StoreNewTokens(test)
+}
+
+// streamHandler sends a message to discord
+func streamHandler(w http.ResponseWriter, r *http.Request) {
+	discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/")
+	w.Write([]byte("Message Sent to Discord"))
+
 }

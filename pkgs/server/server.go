@@ -22,6 +22,7 @@ func NewServer() {
 	mux.HandleFunc("/cheer", cheerHandler)
 	mux.HandleFunc("/reward", rewardHandler)
 	mux.HandleFunc("/test", testHandler)
+	mux.HandleFunc("/stream", streamHandler)
 	logger.Info("Running and listening")
 
 	srv := &http.Server{
