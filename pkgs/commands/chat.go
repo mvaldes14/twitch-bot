@@ -39,7 +39,7 @@ func ParseMessage(msg types.ChatMessageEvent) {
 	case "!blog":
 		SendMessage("https://mvaldes.dev")
 	case "!discord":
-		SendMessage("https://discord.gg/bMrKXDPz")
+		SendMessage("https://links.mvaldes.dev/discord")
 	case "!song":
 		token := spotify.RefreshToken()
 		song := spotify.GetSong(token)
