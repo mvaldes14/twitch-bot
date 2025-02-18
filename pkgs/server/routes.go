@@ -33,8 +33,7 @@ func respondToChallenge(w http.ResponseWriter, r *http.Request) {
 // middleWareRoute checks for headers in all requests
 func middleWareRoute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Info("%v - %v", r.Header, r.URL)
-		if r.Header.Get("Twitch-Eventsub-Message-Type ") == "webhook_callback_verification" {
+		if r.Header.Get("Twitch-Eventsub-Message-Type") == "webhook_callback_verification" {
 			respondToChallenge(w, r)
 		} else {
 			next.ServeHTTP(w, r)
