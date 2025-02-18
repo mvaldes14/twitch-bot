@@ -33,6 +33,7 @@ func respondToChallenge(w http.ResponseWriter, r *http.Request) {
 // middleWareRoute checks for headers in all requests
 func middleWareRoute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("%v - %v", r.Header, r.URL)
 		if r.Header.Get("Twitch-Eventsub-Message-Type ") == "webhook_callback_verification" {
 			respondToChallenge(w, r)
 		} else {
@@ -209,6 +210,7 @@ func testHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // streamHandler sends a message to discord
 func streamHandler(w http.ResponseWriter, _ *http.Request) {
+	logger.Info("Sending message to discord")
 	discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/")
 	w.Write([]byte("Message Sent to Discord"))
 }
