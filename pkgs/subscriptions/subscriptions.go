@@ -100,6 +100,6 @@ func DeleteSubscription(id int) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if resp.StatusCode == http.StatusNoContent {
-		logger.Info("Subscription deleted:" + id)
+		logger.Info("Subscription deleted:", id)
 	}
 }

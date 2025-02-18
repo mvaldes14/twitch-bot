@@ -27,7 +27,7 @@ func ParseMessage(msg types.ChatMessageEvent) {
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
-		SendMessage("!github, !dotfiles, !song, !social, !blog ")
+		SendMessage("!github, !dotfiles, !song, !social, !blog, !youtube ")
 	case "!github":
 		SendMessage("https://links.mvaldes.dev/gh")
 	case "!dotfiles":
@@ -40,6 +40,8 @@ func ParseMessage(msg types.ChatMessageEvent) {
 		SendMessage("https://mvaldes.dev")
 	case "!discord":
 		SendMessage("https://links.mvaldes.dev/discord")
+	case "!youtube":
+		SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
 		token := spotify.RefreshToken()
 		song := spotify.GetSong(token)
