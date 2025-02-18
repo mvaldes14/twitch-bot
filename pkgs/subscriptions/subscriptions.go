@@ -85,3 +85,21 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 		logger.Info("No subscriptions to delete")
 	}
 }
+
+// func eleteSubscription deletes a subscription with an ID
+func DeleteSubscription(id int) {
+	deleteURL := fmt.Sprintf("%v?id=%v", url, id)
+	req, err := http.NewRequest("DELETE", deleteURL, nil)
+	if err != nil {
+		return
+	}
+	headers := utils.BuildSecretHeaders()
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+headers.Token)
+	req.Header.Set("Client-Id", headers.ClientID)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if resp.StatusCode == http.StatusNoContent {
+		logger.Info("Subscription deleted:" + id)
+	}
+}

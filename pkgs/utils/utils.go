@@ -136,6 +136,7 @@ func GeneratePayload(subType types.SubscriptionType) string {
           "secret": "%v"
       }
     }`, subType.Type, subType.Version, userID, callbackURL, secret)
+
 	case "stream":
 		payload = fmt.Sprintf(`{
       "type": "%v",

@@ -58,7 +58,7 @@ func listHandler(w http.ResponseWriter, _ *http.Request) {
 	logger.Info("Current Subscription List")
 	for _, sub := range subsList.Data {
 		logger.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
-		subItem := fmt.Sprintf("Status: %s, Type: %s\n", sub.Status, sub.Type)
+		subItem := fmt.Sprintf("ID:%s, Status: %s, Type: %s\n", sub.ID, sub.Status, sub.Type)
 		w.Write([]byte(subItem))
 	}
 }
@@ -201,15 +201,14 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 
 // testHandler is used to test if the bot is responding to messages
 // this is purely for me to test new functionality.
-func testHandler(w http.ResponseWriter, r *http.Request) {
+func testHandler(_ http.ResponseWriter, _ *http.Request) {
 	logger.Info("Test")
 	test := utils.GenerateNewToken()
 	utils.StoreNewTokens(test)
 }
 
 // streamHandler sends a message to discord
-func streamHandler(w http.ResponseWriter, r *http.Request) {
+func streamHandler(w http.ResponseWriter, _ *http.Request) {
 	discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/")
 	w.Write([]byte("Message Sent to Discord"))
-
 }
