@@ -63,6 +63,7 @@ func listHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+// TODO: Figure a way to respond to 401s which means the token is expired
 // createHandler creates a subscription based on the parameter
 func createHandler(_ http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
@@ -209,7 +210,6 @@ func testHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // streamHandler sends a message to discord
 func streamHandler(w http.ResponseWriter, _ *http.Request) {
-	logger.Info("Sending message to discord")
-	discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/")
+	discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	w.Write([]byte("Message Sent to Discord"))
 }
