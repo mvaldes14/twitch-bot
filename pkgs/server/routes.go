@@ -67,7 +67,7 @@ func deleteHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // healthHandler returns a healthy message
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Write([]byte("msg: OK\n"))
+	w.Write([]byte("{msg: OK}"))
 }
 
 // listHandler returns the current subscription list

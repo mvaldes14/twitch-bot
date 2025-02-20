@@ -15,7 +15,6 @@ func NewServer() {
 	api.HandleFunc("/create", createHandler)
 	api.HandleFunc("/delete", deleteHandler)
 	api.HandleFunc("/list", listHandler)
-	api.HandleFunc("/health", healthHandler)
 	api.HandleFunc("/test", testHandler)
 
 	router := http.NewServeMux()
@@ -25,6 +24,7 @@ func NewServer() {
 	router.HandleFunc("/cheer", cheerHandler)
 	router.HandleFunc("/reward", rewardHandler)
 	router.HandleFunc("/stream", streamHandler)
+	router.HandleFunc("/health", healthHandler)
 	logger.Info("Running and listening")
 
 	router.Handle("/api/", http.StripPrefix("/api", checkAuthAdmin(api)))
