@@ -206,6 +206,8 @@ func testHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // streamHandler sends a message to discord
 func streamHandler(w http.ResponseWriter, _ *http.Request) {
-	discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
-	w.Write([]byte("Message Sent to Discord"))
+	err := discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
+	if err != nil {
+		logger.Error("Error sending message to discord", err)
+	}
 }
