@@ -11,23 +11,27 @@ var logger = utils.Logger()
 
 // NewServer creates the http server
 func NewServer() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/create", createHandler)
-	mux.HandleFunc("/delete", deleteHandler)
-	mux.HandleFunc("/list", listHandler)
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/chat", chatHandler)
-	mux.HandleFunc("/follow", followHandler)
-	mux.HandleFunc("/sub", subHandler)
-	mux.HandleFunc("/cheer", cheerHandler)
-	mux.HandleFunc("/reward", rewardHandler)
-	mux.HandleFunc("/test", testHandler)
-	mux.HandleFunc("/stream", streamHandler)
+	api := http.NewServeMux()
+	api.HandleFunc("/create", createHandler)
+	api.HandleFunc("/delete", deleteHandler)
+	api.HandleFunc("/list", listHandler)
+	api.HandleFunc("/health", healthHandler)
+	api.HandleFunc("/test", testHandler)
+
+	router := http.NewServeMux()
+	router.HandleFunc("/follow", followHandler)
+	router.HandleFunc("/chat", chatHandler)
+	router.HandleFunc("/sub", subHandler)
+	router.HandleFunc("/cheer", cheerHandler)
+	router.HandleFunc("/reward", rewardHandler)
+	router.HandleFunc("/stream", streamHandler)
 	logger.Info("Running and listening")
+
+	router.Handle("/api/", http.StripPrefix("/api", checkAuthAdmin(api)))
 
 	srv := &http.Server{
 		Addr:    ":3000",
-		Handler: middleWareRoute(mux),
+		Handler: middleWareRoute(router),
 	}
 	err := srv.ListenAndServe()
 	logger.Error("FATAL", "Error starting the server", err)

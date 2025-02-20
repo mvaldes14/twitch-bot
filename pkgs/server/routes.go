@@ -1,3 +1,4 @@
+// Package server hosts all handlers for the endpoints
 package server
 
 import (
@@ -5,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
@@ -14,6 +16,31 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
 
+// MIDDLEWARES
+// apiAdmin middleware
+func checkAuthAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := os.Getenv("Admin-Token")
+		if r.Header.Get("Token") == token {
+			next.ServeHTTP(w, r)
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	})
+}
+
+// middleWareRoute checks for headers in all requests
+func middleWareRoute(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Twitch-Eventsub-Message-Type") == "webhook_callback_verification" {
+			respondToChallenge(w, r)
+		} else {
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
+// HANDLERS
 // respondToChallenge responds to challenge for a subscription on twitch eventsub
 func respondToChallenge(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Responding to challenge")
@@ -27,17 +54,6 @@ func respondToChallenge(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "plain/text")
 	w.Write([]byte(challengeResponse.Challenge))
 	logger.Info("Response sent")
-}
-
-// middleWareRoute checks for headers in all requests
-func middleWareRoute(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Twitch-Eventsub-Message-Type") == "webhook_callback_verification" {
-			respondToChallenge(w, r)
-		} else {
-			next.ServeHTTP(w, r)
-		}
-	})
 }
 
 // deleteHandler deletes all subscriptions
@@ -121,7 +137,7 @@ func createHandler(_ http.ResponseWriter, r *http.Request) {
 }
 
 // chatHandler responds to chat messages
-func chatHandler(w http.ResponseWriter, r *http.Request) {
+func chatHandler(_ http.ResponseWriter, r *http.Request) {
 	var chatEvent types.ChatMessageEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -134,7 +150,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // followHandler responds to follow events
-func followHandler(w http.ResponseWriter, r *http.Request) {
+func followHandler(_ http.ResponseWriter, r *http.Request) {
 	var followEventResponse types.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -147,7 +163,7 @@ func followHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // subHandler responds to subscription events
-func subHandler(w http.ResponseWriter, r *http.Request) {
+func subHandler(_ http.ResponseWriter, r *http.Request) {
 	var subEventResponse types.SubscriptionEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -160,7 +176,7 @@ func subHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // cheerHandler responds to cheer events
-func cheerHandler(w http.ResponseWriter, r *http.Request) {
+func cheerHandler(_ http.ResponseWriter, r *http.Request) {
 	var cheerEventResponse types.CheerEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -173,7 +189,7 @@ func cheerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // rewardHandler responds to reward events
-func rewardHandler(w http.ResponseWriter, r *http.Request) {
+func rewardHandler(_ http.ResponseWriter, r *http.Request) {
 	var rewardEventResponse types.RewardEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -205,9 +221,9 @@ func testHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // streamHandler sends a message to discord
-func streamHandler(w http.ResponseWriter, _ *http.Request) {
+func streamHandler(_ http.ResponseWriter, _ *http.Request) {
 	err := discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
-		logger.Error("Error sending message to discord", err)
+		logger.Error("Error", "sending message to discord", err)
 	}
 }
