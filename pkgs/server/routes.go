@@ -20,7 +20,7 @@ import (
 // apiAdmin middleware
 func checkAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := os.Getenv("Admin-Token")
+		token := os.Getenv("ADMIN_TOKEN")
 		if r.Header.Get("Token") == token {
 			next.ServeHTTP(w, r)
 		} else {
