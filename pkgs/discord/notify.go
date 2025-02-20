@@ -11,7 +11,8 @@ import (
 func NotifyChannel(msg string) (string, error) {
 	fmt.Println("Sending message to discord")
 	url := os.Getenv("DISCORD_WEBHOOK")
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(msg)))
+	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return "", err
 	}
@@ -22,6 +23,7 @@ func NotifyChannel(msg string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+	fmt.Println(string(resp.Body))
 
 	if resp.StatusCode != 200 {
 		fmt.Println("Error sending message to discord")

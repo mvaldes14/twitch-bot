@@ -8,7 +8,6 @@ import (
 
 	"github.com/mvaldes14/twitch-bot/pkgs/commands"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
-	"github.com/mvaldes14/twitch-bot/pkgs/obs"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
@@ -182,9 +181,6 @@ func rewardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
-	if rewardEventResponse.Event.Reward.Title == "Random Sound" {
-		obs.Generate("sound")
-	}
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
 		token := spotify.RefreshToken()
 		spotify.NextSong(token)
