@@ -21,6 +21,9 @@ import (
 func checkAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := os.Getenv("ADMIN_TOKEN")
+		if token == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
 		if r.Header.Get("Token") == token {
 			next.ServeHTTP(w, r)
 		} else {
