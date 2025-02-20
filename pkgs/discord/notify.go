@@ -1,3 +1,4 @@
+// package discord interacts with discord api to send messages to a channel
 package discord
 
 import (
@@ -7,7 +8,7 @@ import (
 	"os"
 )
 
-// func NotifyChannel sends a message to a discord channel
+// NotifyChannel sends a message to a discord channel
 func NotifyChannel(msg string) (string, error) {
 	fmt.Println("Sending message to discord")
 	url := os.Getenv("DISCORD_WEBHOOK")
@@ -23,7 +24,6 @@ func NotifyChannel(msg string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	fmt.Println(string(resp.Body))
 
 	if resp.StatusCode != 200 {
 		fmt.Println("Error sending message to discord")
