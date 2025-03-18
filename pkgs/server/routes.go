@@ -229,4 +229,17 @@ func streamHandler(_ http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		logger.Error("Error", "sending message to discord", err)
 	}
+	req, err := http.NewRequest("POST", "https://automate.mvaldes.dev/webhook/stream-live", nil)
+	if err != nil {
+		logger.Error("Error", "could not generate request for x post", err)
+	}
+	req.Header.Add("Token", os.Getenv("ADMIN_TOKEN"))
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("Error", "Could not send request to webhook for X post", err)
+	}
+	if resp.StatusCode == 200 {
+		logger.Info("Info", "posting tweet to X", " ")
+	}
 }
