@@ -1,12 +1,10 @@
-// Package utils Holds all of the utilities used by the bot
-package utils
+package routes
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -20,13 +18,8 @@ const (
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
-// Logger Returns a logger in json for the bot
-func Logger() *slog.Logger {
-	return slog.New(slog.NewJSONHandler(os.Stdout, nil))
-}
-
 // MakeRequestMarshallJson receives a request and marshals the response into a struct
-func MakeRequestMarshallJson(r *types.RequestJson, jsonType interface{}) error {
+func (s *Server) MakeRequestMarshallJson(r *types.RequestJson, jsonType interface{}) error {
 	req, err := http.NewRequest(r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
 	if err != nil {
 		return nil
@@ -37,10 +30,10 @@ func MakeRequestMarshallJson(r *types.RequestJson, jsonType interface{}) error {
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	logger.Info("Sending request")
+	s.Log.Info("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error", "Sending request:", err)
+		s.Log.Error("Error", "Sending request:", err)
 		return nil
 	}
 	defer resp.Body.Close()

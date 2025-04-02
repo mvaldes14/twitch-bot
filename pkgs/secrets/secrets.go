@@ -1,4 +1,4 @@
-package utils
+package secrets
 
 import (
 	"fmt"
@@ -13,8 +13,6 @@ const (
 	USER_TOKEN    = "TWITCH_USER_TOKEN"
 	REFRESH_TOKEN = "TWITCH_REFRESH_TOKEN"
 )
-
-var logger = Logger()
 
 func GetUserToken() string {
 	return os.Getenv(USER_TOKEN)

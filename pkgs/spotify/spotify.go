@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
-	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
 
 const (
@@ -28,10 +27,9 @@ const (
 
 var (
 	currentToken string
-	logger       = utils.Logger()
 )
 
-// RefreshToken generates a new token for the spotify api
+// refreshtoken generates a new token for the spotify api
 func RefreshToken() string {
 	logger.Info("Refreshing token")
 	refreshToken := os.Getenv("SPOTIFY_REFRESH_TOKEN")

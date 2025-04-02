@@ -9,15 +9,32 @@ import (
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/types"
-	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
 
 const url = "https://api.twitch.tv/helix/eventsub/subscriptions"
 
-var logger = utils.Logger()
+// type SubscriptionsMethods is the interface that handles all subscriptions
+type SubscriptionsMethods interface {
+	CreateSubscription(payload string) *http.Response
+	GetSubscriptions() types.ValidateSubscription
+	CleanSubscriptions(subs types.ValidateSubscription)
+	DeleteSubscription(id int)
+}
+
+// type Subscription is the struct that handles all subscriptions
+type Subscription struct{
+  Log: *slog.Logger
+}
+
+// NewSubscription creates a new subscription
+func NewSubscription(logger *slog.Logger) *Subscription {
+  return &Subscription{
+    Log: logger,
+  }
+}
 
 // CreateSubscription Generates  a new subscription on an event type
-func CreateSubscription(payload string) *http.Response {
+func (s *Subscription) CreateSubscription(payload string) *http.Response {
 	// subscribe to eventsub
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
@@ -45,7 +62,7 @@ func CreateSubscription(payload string) *http.Response {
 }
 
 // GetSubscriptions Retrieves all subscriptions for the application
-func GetSubscriptions() types.ValidateSubscription {
+func (s *Subscription) GetSubscriptions() types.ValidateSubscription {
 	req, err := http.NewRequest("GET", url, nil)
 	headers := utils.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
@@ -63,7 +80,7 @@ func GetSubscriptions() types.ValidateSubscription {
 }
 
 // CleanSubscriptions Removes all existing subscriptions
-func CleanSubscriptions(subs types.ValidateSubscription) {
+func (s *Subscription) CleanSubscriptions(subs types.ValidateSubscription) {
 	if subs.Total > 0 {
 		for _, sub := range subs.Data {
 			deleteURL := fmt.Sprintf("%v?id=%v", url, sub.ID)
@@ -87,7 +104,7 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 }
 
 // func eleteSubscription deletes a subscription with an ID
-func DeleteSubscription(id int) {
+func (s *Subscription) DeleteSubscription(id int) {
 	deleteURL := fmt.Sprintf("%v?id=%v", url, id)
 	req, err := http.NewRequest("DELETE", deleteURL, nil)
 	if err != nil {

@@ -21,7 +21,7 @@
         devShells = {
           default = pkgs.mkShell {
             inputsFrom = [self'.packages.default];
-            nativeBuildInputs = with pkgs; [act gopls gosimports];
+            nativeBuildInputs = with pkgs; [act gopls gosimports revive];
           };
         };
         packages = {
