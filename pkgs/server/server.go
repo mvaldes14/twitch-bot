@@ -6,13 +6,15 @@ import (
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/routes"
+	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 )
 
 // NewServer creates the http server
 func NewServer(logger *slog.Logger, port string) *http.Server {
-	subs := subscriptions.NewSubscription(logger)
-	rs := routes.NewRouter(logger, subs)
+	secretService := secrets.NewSecretService(logger)
+	subs := subscriptions.NewSubscription(logger, secretService)
+	rs := routes.NewRouter(logger, subs, secretService)
 	api := http.NewServeMux()
 	api.HandleFunc("/create", rs.CreateHandler)
 	api.HandleFunc("/delete", rs.DeleteHandler)

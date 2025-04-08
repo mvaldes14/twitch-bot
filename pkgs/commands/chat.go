@@ -71,7 +71,7 @@
 // 		if err != nil {
 // 			logger.Error("Could not form request to update channel info")
 // 		}
-// 		headers := utils.BuildSecretHeaders()
+// 		headers := secrets.BuildSecretHeaders()
 // 		userToken := utils.GetUserToken()
 // 		req.Header.Set("Content-Type", "application/json")
 // 		req.Header.Set("Authorization", "Bearer "+userToken)

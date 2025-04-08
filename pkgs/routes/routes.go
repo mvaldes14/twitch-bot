@@ -18,15 +18,17 @@ import (
 
 // Router is the struct that handles all routes
 type Router struct {
-	Log  *slog.Logger
-	Subs subscriptions.SubscriptionsMethods
+	Log     *slog.Logger
+	Subs    subscriptions.SubscriptionsMethods
+	Secrets secrets.SecretManager
 }
 
 // NewRouter creates a new router
-func NewRouter(logger *slog.Logger, subs subscriptions.SubscriptionsMethods) *Router {
+func NewRouter(logger *slog.Logger, subs subscriptions.SubscriptionsMethods, secretService secrets.SecretManager) *Router {
 	return &Router{
-		Log:  logger,
-		Subs: subs,
+		Log:     logger,
+		Subs:    subs,
+		Secrets: secretService,
 	}
 }
 
@@ -231,9 +233,8 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
-	rt.Log.Info("Test")
-	test := secrets.GenerateNewToken()
-	secrets.StoreNewTokens(test)
+	test := rt.Secrets.GenerateNewToken()
+	rt.Secrets.StoreNewTokens(test)
 }
 
 // StreamHandler sends a message to discord

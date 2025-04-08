@@ -18,7 +18,7 @@
 // 	}
 // 	payload, err := json.Marshal(message)
 // 	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
-// 	headers := utils.BuildSecretHeaders()
+// 	headers := secrets.BuildSecretHeaders()
 // 	req.Header.Set("Content-Type", "application/json")
 // 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 // 	req.Header.Set("Client-Id", headers.ClientID)
