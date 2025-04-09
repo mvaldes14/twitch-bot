@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
-	"github.com/mvaldes14/twitch-bot/pkgs/types"
 )
 
 // URl endpoint for all twitch subscriptions
@@ -19,8 +18,8 @@ const url = "https://api.twitch.tv/helix/eventsub/subscriptions"
 // type SubscriptionsMethods is the interface that handles all subscriptions
 type SubscriptionsMethods interface {
 	CreateSubscription(payload string) *http.Response
-	GetSubscriptions() types.ValidateSubscription
-	CleanSubscriptions(subs types.ValidateSubscription)
+	GetSubscriptions() ValidateSubscription
+	CleanSubscriptions(subs ValidateSubscription)
 	DeleteSubscription(id int)
 }
 
@@ -67,8 +66,8 @@ func (s *Subscription) CreateSubscription(payload string) *http.Response {
 }
 
 // GetSubscriptions Retrieves all subscriptions for the application
-func (s *Subscription) GetSubscriptions() types.ValidateSubscription {
-	req, err := http.NewRequest("GET", url, nil)
+func (s *Subscription) GetSubscriptions() ValidateSubscription {
+	req, _ := http.NewRequest("GET", url, nil)
 	headers := s.Secrets.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -78,14 +77,14 @@ func (s *Subscription) GetSubscriptions() types.ValidateSubscription {
 	if err != nil {
 		s.Log.Error("Error sending request:", "caused by", err)
 	}
-	body, err := io.ReadAll(resp.Body)
-	var subscriptionList types.ValidateSubscription
+	body, _ := io.ReadAll(resp.Body)
+	var subscriptionList ValidateSubscription
 	json.Unmarshal(body, &subscriptionList)
 	return subscriptionList
 }
 
 // CleanSubscriptions Removes all existing subscriptions
-func (s *Subscription) CleanSubscriptions(subs types.ValidateSubscription) {
+func (s *Subscription) CleanSubscriptions(subs ValidateSubscription) {
 	if subs.Total > 0 {
 		for _, sub := range subs.Data {
 			deleteURL := fmt.Sprintf("%v?id=%v", url, sub.ID)
@@ -98,7 +97,7 @@ func (s *Subscription) CleanSubscriptions(subs types.ValidateSubscription) {
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
 			client := &http.Client{}
-			resp, err := client.Do(req)
+			resp, _ := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
 				s.Log.Info("Subscription deleted:" + sub.ID)
 			}
@@ -120,7 +119,7 @@ func (s *Subscription) DeleteSubscription(id int) {
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, _ := client.Do(req)
 	if resp.StatusCode == http.StatusNoContent {
 		s.Log.Info("Subscription deleted", "name:", id)
 	}

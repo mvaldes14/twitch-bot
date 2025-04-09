@@ -8,23 +8,21 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-
-	"github.com/mvaldes14/twitch-bot/pkgs/types"
 )
 
 const (
-	PROJECT_NAME    = "bots"
-	CONFIG_NAME     = "tokens"
-	USER_TOKEN      = "TWITCH_USER_TOKEN"
-	REFRESH_TOKEN   = "TWITCH_REFRESH_TOKEN"
-	TWITCH_TOKEN    = "TWITCH_TOKEN"
-	CLIENT_ID       = "TWITCH_CLIENT_ID"
-	CLIENT_SECRET   = "TWITCH_CLIENT_SECRET"
-	DOPPLER_TOKEN   = "DOPPLER_TOKEN"
+	PROJECT_NAME  = "bots"
+	CONFIG_NAME   = "tokens"
+	USER_TOKEN    = "TWITCH_USER_TOKEN"
+	REFRESH_TOKEN = "TWITCH_REFRESH_TOKEN"
+	TWITCH_TOKEN  = "TWITCH_TOKEN"
+	CLIENT_ID     = "TWITCH_CLIENT_ID"
+	CLIENT_SECRET = "TWITCH_CLIENT_SECRET"
+	DOPPLER_TOKEN = "DOPPLER_TOKEN"
 
 	// API Endpoints
 	TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
-	DOPPLER_API_URL = "https://api.doppler.com/v3/configs/config/secrets"
+	DOPPLER_API_URL  = "https://api.doppler.com/v3/configs/config/secrets"
 )
 
 // SecretManager interface defines the contract for managing secrets
@@ -32,11 +30,11 @@ type SecretManager interface {
 	// GetUserToken retrieves the user token from environment
 	GetUserToken() string
 	// BuildSecretHeaders builds headers for Twitch API requests
-	BuildSecretHeaders() types.RequestHeader
+	BuildSecretHeaders() RequestHeader
 	// GenerateNewToken generates a new token using refresh token
-	GenerateNewToken() types.TwitchRefreshResponse
+	GenerateNewToken() TwitchRefreshResponse
 	// StoreNewTokens stores new tokens in Doppler
-	StoreNewTokens(tokens types.TwitchRefreshResponse) bool
+	StoreNewTokens(tokens TwitchRefreshResponse) bool
 }
 
 // SecretService implements SecretManager interface
@@ -57,17 +55,17 @@ func (s *SecretService) GetUserToken() string {
 }
 
 // BuildSecretHeaders Returns the secrets from env variables to build headers for requests
-func (s *SecretService) BuildSecretHeaders() types.RequestHeader {
+func (s *SecretService) BuildSecretHeaders() RequestHeader {
 	token := os.Getenv(TWITCH_TOKEN)
 	clientID := os.Getenv(CLIENT_ID)
-	return types.RequestHeader{
+	return RequestHeader{
 		Token:    token,
 		ClientID: clientID,
 	}
 }
 
 // GenerateNewToken creates a new token by using the existing refresh token
-func (s *SecretService) GenerateNewToken() types.TwitchRefreshResponse {
+func (s *SecretService) GenerateNewToken() TwitchRefreshResponse {
 	twitchId := os.Getenv(CLIENT_ID)
 	twitchSecret := os.Getenv(CLIENT_SECRET)
 	twitchRefreshToken := os.Getenv(REFRESH_TOKEN)
@@ -75,13 +73,13 @@ func (s *SecretService) GenerateNewToken() types.TwitchRefreshResponse {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	req := types.RequestJson{
+	req := RequestJson{
 		Method:  "POST",
 		URL:     TWITCH_TOKEN_URL,
 		Payload: payload,
 		Headers: headers,
 	}
-	var response types.TwitchRefreshResponse
+	var response TwitchRefreshResponse
 	if err := s.MakeRequestMarshallJson(&req, &response); err != nil {
 		s.Logger.Error("Error", "Making Execution", req.URL, "Failed:", err)
 	}
@@ -89,7 +87,7 @@ func (s *SecretService) GenerateNewToken() types.TwitchRefreshResponse {
 }
 
 // MakeRequestMarshallJson makes a request and marshals the response into the target interface
-func (s *SecretService) MakeRequestMarshallJson(req *types.RequestJson, target interface{}) error {
+func (s *SecretService) MakeRequestMarshallJson(req *RequestJson, target interface{}) error {
 	httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBuffer([]byte(req.Payload)))
 	if err != nil {
 		return err
@@ -113,7 +111,7 @@ func (s *SecretService) MakeRequestMarshallJson(req *types.RequestJson, target i
 }
 
 // StoreNewTokens stores new tokens in Doppler
-func (s *SecretService) StoreNewTokens(tokens types.TwitchRefreshResponse) bool {
+func (s *SecretService) StoreNewTokens(tokens TwitchRefreshResponse) bool {
 	dopplerToken := os.Getenv(DOPPLER_TOKEN)
 	headers := map[string]string{
 		"Accept":        "application/json",
@@ -126,14 +124,14 @@ func (s *SecretService) StoreNewTokens(tokens types.TwitchRefreshResponse) bool 
 		"config": "%v",
     "secrets": {"TWITCH_USER_TOKEN": "%v", "TWITCH_REFRESH_TOKEN": "%v"}
 	}`, PROJECT_NAME, CONFIG_NAME, tokens.AccessToken, tokens.RefreshToken)
-	req := types.RequestJson{
+	req := RequestJson{
 		Method:  "POST",
 		URL:     DOPPLER_API_URL,
 		Payload: payload,
 		Headers: headers,
 	}
 	s.Logger.Info("Storing new tokens in doppler")
-	var response types.DopplerSecretUpdate
+	var response DopplerSecretUpdate
 	if err := s.MakeRequestMarshallJson(&req, &response); err != nil {
 		s.Logger.Error("Error", "Making Execution", req.URL, "Failed:", err)
 		return false

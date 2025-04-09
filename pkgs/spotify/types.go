@@ -1,256 +1,15 @@
-package types
+package spotify
 
 import "time"
 
-type RequestJson struct {
-	Method  string
-	URL     string
-	Payload string
-	Headers map[string]string
-}
-
-type EventLog struct {
-	Username  string    `json:"username"`
-	Message   string    `json:"message"`
-	Timestamp time.Time `json:"@timestamp"`
-	Type      string    `json:"type"`
-}
-
-type SubscriptionType struct {
-	Name    string
-	Version string
-	Type    string
-}
-
-type RequestHeader struct {
-	Token    string
-	ClientID string
-}
-
-type ChatMessage struct {
-	BroadcasterID string `json:"broadcaster_id"`
-	SenderID      string `json:"sender_id"`
-	Message       string `json:"message"`
-}
-
-type ValidateSubscription struct {
-	Data []struct {
-		ID        string `json:"id"`
-		Status    string `json:"status"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-			UserID            string `json:"user_id"`
-		} `json:"condition"`
-		CreatedAt time.Time `json:"created_at"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		Cost int `json:"cost"`
-	} `json:"data"`
-	Total        int `json:"total"`
-	MaxTotalCost int `json:"max_total_cost"`
-	TotalCost    int `json:"total_cost"`
-}
-
-type SubscribeEvent struct {
-	Challenge    string `json:"challenge"`
-	Subscription struct {
-		ID        string `json:"id"`
-		Status    string `json:"status"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Cost      int    `json:"cost"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-		} `json:"condition"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		CreatedAt time.Time `json:"created_at"`
-	} `json:"subscription"`
-}
-
-type ChatMessageEvent struct {
-	Challenge    string `json:"challenge"`
-	Subscription struct {
-		ID        string `json:"id"`
-		Status    string `json:"status"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-			UserID            string `json:"user_id"`
-		} `json:"condition"`
-		Transport struct {
-			Method    string `json:"method"`
-			SessionID string `json:"session_id"`
-		} `json:"transport"`
-		CreatedAt time.Time `json:"created_at"`
-		Cost      int       `json:"cost"`
-	} `json:"subscription"`
-	Event struct {
-		BroadcasterUserID    string `json:"broadcaster_user_id"`
-		BroadcasterUserLogin string `json:"broadcaster_user_login"`
-		BroadcasterUserName  string `json:"broadcaster_user_name"`
-		ChatterUserID        string `json:"chatter_user_id"`
-		ChatterUserLogin     string `json:"chatter_user_login"`
-		ChatterUserName      string `json:"chatter_user_name"`
-		MessageID            string `json:"message_id"`
-		Message              struct {
-			Text      string `json:"text"`
-			Fragments []struct {
-				Type      string      `json:"type"`
-				Text      string      `json:"text"`
-				Cheermote interface{} `json:"cheermote"`
-				Emote     interface{} `json:"emote"`
-				Mention   interface{} `json:"mention"`
-			} `json:"fragments"`
-		} `json:"message"`
-		Color  string `json:"color"`
-		Badges []struct {
-			SetID string `json:"set_id"`
-			ID    string `json:"id"`
-			Info  string `json:"info"`
-		} `json:"badges"`
-		MessageType                 string      `json:"message_type"`
-		Cheer                       interface{} `json:"cheer"`
-		Reply                       interface{} `json:"reply"`
-		ChannelPointsCustomRewardID interface{} `json:"channel_points_custom_reward_id"`
-	} `json:"event"`
-}
-
-type FollowEvent struct {
-	Subscription struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Status    string `json:"status"`
-		Cost      int    `json:"cost"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-			ModeratorUserID   string `json:"moderator_user_id"`
-		} `json:"condition"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		CreatedAt time.Time `json:"created_at"`
-	} `json:"subscription"`
-	Event struct {
-		UserID               string    `json:"user_id"`
-		UserLogin            string    `json:"user_login"`
-		UserName             string    `json:"user_name"`
-		BroadcasterUserID    string    `json:"broadcaster_user_id"`
-		BroadcasterUserLogin string    `json:"broadcaster_user_login"`
-		BroadcasterUserName  string    `json:"broadcaster_user_name"`
-		FollowedAt           time.Time `json:"followed_at"`
-	} `json:"event"`
-}
-
-type SubscriptionEvent struct {
-	Subscription struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Status    string `json:"status"`
-		Cost      int    `json:"cost"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-		} `json:"condition"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		CreatedAt time.Time `json:"created_at"`
-	} `json:"subscription"`
-	Event struct {
-		UserID               string `json:"user_id"`
-		UserLogin            string `json:"user_login"`
-		UserName             string `json:"user_name"`
-		BroadcasterUserID    string `json:"broadcaster_user_id"`
-		BroadcasterUserLogin string `json:"broadcaster_user_login"`
-		BroadcasterUserName  string `json:"broadcaster_user_name"`
-		Tier                 string `json:"tier"`
-		IsGift               bool   `json:"is_gift"`
-	} `json:"event"`
-}
-
-type CheerEvent struct {
-	Subscription struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Status    string `json:"status"`
-		Cost      int    `json:"cost"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-		} `json:"condition"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		CreatedAt time.Time `json:"created_at"`
-	} `json:"subscription"`
-	Event struct {
-		IsAnonymous          bool   `json:"is_anonymous"`
-		UserID               string `json:"user_id"`
-		UserLogin            string `json:"user_login"`
-		UserName             string `json:"user_name"`
-		BroadcasterUserID    string `json:"broadcaster_user_id"`
-		BroadcasterUserLogin string `json:"broadcaster_user_login"`
-		BroadcasterUserName  string `json:"broadcaster_user_name"`
-		Message              string `json:"message"`
-		Bits                 int    `json:"bits"`
-	} `json:"event"`
-}
-
-type RewardEvent struct {
-	Subscription struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Status    string `json:"status"`
-		Cost      int    `json:"cost"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-			RewardID          string `json:"reward_id"`
-		} `json:"condition"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		CreatedAt time.Time `json:"created_at"`
-	} `json:"subscription"`
-	Event struct {
-		ID                   string `json:"id"`
-		BroadcasterUserID    string `json:"broadcaster_user_id"`
-		BroadcasterUserLogin string `json:"broadcaster_user_login"`
-		BroadcasterUserName  string `json:"broadcaster_user_name"`
-		UserID               string `json:"user_id"`
-		UserLogin            string `json:"user_login"`
-		UserName             string `json:"user_name"`
-		UserInput            string `json:"user_input"`
-		Status               string `json:"status"`
-		Reward               struct {
-			ID     string `json:"id"`
-			Title  string `json:"title"`
-			Cost   int    `json:"cost"`
-			Prompt string `json:"prompt"`
-		} `json:"reward"`
-		RedeemedAt time.Time `json:"redeemed_at"`
-	} `json:"event"`
-}
-
+// SpotifyTokenResponse represents the response from Spotify token endpoint
 type SpotifyTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	Scope       string `json:"scope"`
 }
 
+// SpotifyCurrentlyPlaying represents the currently playing track from Spotify
 type SpotifyCurrentlyPlaying struct {
 	Device struct {
 		ID               string `json:"id"`
@@ -327,8 +86,8 @@ type SpotifyCurrentlyPlaying struct {
 			} `json:"images"`
 			Name       string `json:"name"`
 			Popularity int    `json:"popularity"`
-			Type       string `json:"type"`
-			URI        string `json:"uri"`
+			Type      string `json:"type"`
+			URI       string `json:"uri"`
 		} `json:"artists"`
 		AvailableMarkets []string `json:"available_markets"`
 		DiscNumber       int      `json:"disc_number"`
@@ -373,6 +132,7 @@ type SpotifyCurrentlyPlaying struct {
 	} `json:"actions"`
 }
 
+// SpotifyPlaylistResponse represents a Spotify playlist
 type SpotifyPlaylistResponse struct {
 	Collaborative bool   `json:"collaborative"`
 	Description   string `json:"description"`
@@ -496,6 +256,7 @@ type SpotifyPlaylistResponse struct {
 	PrimaryColor interface{} `json:"primary_color"`
 }
 
+// SpotifyPlaylistItemList represents a list of items in a Spotify playlist
 type SpotifyPlaylistItemList struct {
 	Href     string `json:"href"`
 	Limit    int    `json:"limit"`
@@ -571,8 +332,8 @@ type SpotifyPlaylistItemList struct {
 				} `json:"images"`
 				Name       string `json:"name"`
 				Popularity int    `json:"popularity"`
-				Type       string `json:"type"`
-				URI        string `json:"uri"`
+				Type      string `json:"type"`
+				URI       string `json:"uri"`
 			} `json:"artists"`
 			AvailableMarkets []string `json:"available_markets"`
 			DiscNumber       int      `json:"disc_number"`
@@ -603,19 +364,4 @@ type SpotifyPlaylistItemList struct {
 			IsLocal     bool   `json:"is_local"`
 		} `json:"track"`
 	} `json:"items"`
-}
-
-type TwitchRefreshResponse struct {
-	AccessToken  string   `json:"access_token"`
-	RefreshToken string   `json:"refresh_token"`
-	Scope        []string `json:"scope"`
-	TokenType    string   `json:"token_type"`
-}
-
-type DopplerSecretUpdate struct {
-	Messages []string `json:"messages"`
-	Data     struct {
-		Name string `json:"name"`
-	} `json:"data"`
-	Success bool `json:"success"`
 }

@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mvaldes14/twitch-bot/pkgs/types"
+	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 )
 
 // MakeRequestMarshallJson receives a request and marshals the response into a struct
-func (rt *Router) MakeRequestMarshallJson(r *types.RequestJson, jsonType interface{}) error {
+func (rt *Router) MakeRequestMarshallJson(r *RequestJson, jsonType interface{}) error {
 	req, err := http.NewRequest(r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
 	if err != nil {
 		return nil
@@ -33,7 +33,7 @@ func (rt *Router) MakeRequestMarshallJson(r *types.RequestJson, jsonType interfa
 	resp, err := client.Do(req)
 	if err != nil {
 		rt.Log.Error("Error", "Sending request:", err)
-		return nil
+		return err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -41,7 +41,8 @@ func (rt *Router) MakeRequestMarshallJson(r *types.RequestJson, jsonType interfa
 }
 
 // GeneratePayload Builds the payload for each subscription type
-func GeneratePayload(subType types.SubscriptionType) string {
+func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string {
+	rt.Log.Info("Generating payload for subscription type", "type", subType.Name)
 	var payload string
 
 	// Define the condition based on subscription type

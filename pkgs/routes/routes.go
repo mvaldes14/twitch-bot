@@ -9,26 +9,40 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/actions"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
-	"github.com/mvaldes14/twitch-bot/pkgs/types"
 )
+
+// RequestJson represents a JSON HTTP request
+type RequestJson struct {
+	Method  string
+	URL     string
+	Payload string
+	Headers map[string]string
+}
 
 // Router is the struct that handles all routes
 type Router struct {
 	Log     *slog.Logger
 	Subs    subscriptions.SubscriptionsMethods
 	Secrets secrets.SecretManager
+	Actions *actions.Actions
+	Spotify *spotify.Spotify
 }
 
 // NewRouter creates a new router
 func NewRouter(logger *slog.Logger, subs subscriptions.SubscriptionsMethods, secretService secrets.SecretManager) *Router {
+	actions := actions.NewActions(logger, secretService)
+	spotify := spotify.NewSpotify(logger)
 	return &Router{
 		Log:     logger,
 		Subs:    subs,
 		Secrets: secretService,
+		Actions: actions,
+		Spotify: spotify,
 	}
 }
 
@@ -62,7 +76,7 @@ func (rt *Router) MiddleWareRoute(next http.Handler) http.Handler {
 // respondToChallenge responds to challenge for a subscription on twitch eventsub
 func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 	rt.Log.Info("Responding to challenge")
-	var challengeResponse types.SubscribeEvent
+	var challengeResponse subscriptions.SubscribeEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
@@ -96,81 +110,67 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// TODO: Figure a way to respond to 401s which means the token is expired
-
 // CreateHandler creates a subscription based on the parameter
 func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	subType := query.Get("type")
-	switch subType {
-	case "chat":
-		subTypeForm := types.SubscriptionType{
+	subscriptionTypes := map[string]subscriptions.SubscriptionType{
+		"chat": {
 			Name:    "chat",
 			Version: "1",
 			Type:    "channel.chat.message",
-		}
-		payload := GeneratePayload(subTypeForm)
-		rt.Subs.CreateSubscription(payload)
-	case "follow":
-		subTypeForm := types.SubscriptionType{
+		},
+		"follow": {
 			Name:    "follow",
 			Version: "2",
 			Type:    "channel.follow",
-		}
-		payload := GeneratePayload(subTypeForm)
-		rt.Subs.CreateSubscription(payload)
-	case "subscription":
-		subTypeForm := types.SubscriptionType{
+		},
+		"subscription": {
 			Name:    "subscribe",
 			Version: "1",
 			Type:    "channel.subscribe",
-		}
-		payload := GeneratePayload(subTypeForm)
-		rt.Subs.CreateSubscription(payload)
-	case "cheer":
-		subTypeForm := types.SubscriptionType{
+		},
+		"cheer": {
 			Name:    "cheer",
 			Version: "1",
 			Type:    "channel.cheer",
-		}
-		payload := GeneratePayload(subTypeForm)
-		rt.Subs.CreateSubscription(payload)
-	case "reward":
-		subTypeForm := types.SubscriptionType{
+		},
+		"reward": {
 			Name:    "reward",
 			Version: "1",
 			Type:    "channel.channel_points_custom_reward_redemption.add",
-		}
-		payload := GeneratePayload(subTypeForm)
-		rt.Subs.CreateSubscription(payload)
-	case "stream":
-		subTypeForm := types.SubscriptionType{
+		},
+		"stream": {
 			Name:    "stream",
 			Version: "1",
 			Type:    "stream.online",
-		}
-		payload := GeneratePayload(subTypeForm)
-		rt.Subs.CreateSubscription(payload)
+		},
 	}
-
+	if subTypeConfig, ok := subscriptionTypes[subType]; ok {
+		payload := rt.GeneratePayload(subTypeConfig)
+		rt.Subs.CreateSubscription(payload)
+		rt.Log.Info("Subscription created", "type", subType)
+	} else {
+		rt.Log.Error("Invalid subscription", "type", subType)
+	}
 }
 
 // ChatHandler responds to chat messages
 func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
-	var chatEvent types.ChatMessageEvent
+	var chatEvent subscriptions.ChatMessageEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
 	}
 	defer r.Body.Close()
 	json.Unmarshal(body, &chatEvent)
-	// Send to parser to respond
-	// commands.ParseMessage(chatEvent)
+	//	Send to parser to respond
+	rt.Actions.ParseMessage(chatEvent)
 }
 
 // FollowHandler responds to follow events
 func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
-	var followEventResponse types.FollowEvent
+	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
@@ -183,7 +183,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 
 // SubHandler responds to subscription events
 func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
-	var subEventResponse types.SubscriptionEvent
+	var subEventResponse subscriptions.SubscriptionEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
@@ -196,7 +196,7 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 
 // CheerHandler responds to cheer events
 func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
-	var cheerEventResponse types.CheerEvent
+	var cheerEventResponse subscriptions.CheerEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
@@ -209,7 +209,7 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 
 // RewardHandler responds to reward events
 func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
-	var rewardEventResponse types.RewardEvent
+	var rewardEventResponse subscriptions.RewardEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
@@ -217,17 +217,17 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
-		token := spotify.RefreshToken()
-		spotify.NextSong(token)
+		token := rt.Spotify.RefreshToken()
+		rt.Spotify.NextSong(token)
 	}
 	if rewardEventResponse.Event.Reward.Title == "Add Song" {
 		spotifyURL := rewardEventResponse.Event.UserInput
-		token := spotify.RefreshToken()
-		spotify.AddToPlaylist(token, spotifyURL)
+		token := rt.Spotify.RefreshToken()
+		rt.Spotify.AddToPlaylist(token, spotifyURL)
 	}
 	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-		token := spotify.RefreshToken()
-		spotify.DeleteSongPlaylist(token)
+		token := rt.Spotify.RefreshToken()
+		rt.Spotify.DeleteSongPlaylist(token)
 	}
 }
 
