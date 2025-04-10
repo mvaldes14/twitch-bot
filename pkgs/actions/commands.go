@@ -24,12 +24,12 @@ const (
 // Actions handles all Twitch chat actions and commands
 type Actions struct {
 	Logger  *slog.Logger
-	Secrets secrets.SecretManager
+	Secrets *secrets.SecretService
 	Spotify *spotify.Spotify
 }
 
 // NewActions creates a new Actions instance
-func NewActions(logger *slog.Logger, secrets secrets.SecretManager) *Actions {
+func NewActions(logger *slog.Logger, secrets *secrets.SecretService) *Actions {
 	return &Actions{
 		Logger:  logger,
 		Secrets: secrets,

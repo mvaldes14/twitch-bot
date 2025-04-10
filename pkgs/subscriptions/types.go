@@ -1,3 +1,4 @@
+// Package subscriptions handles all subscribe events on twitch
 package subscriptions
 
 import "time"
@@ -97,8 +98,8 @@ type ChatMessageEvent struct {
 		Message              struct {
 			Text      string `json:"text"`
 			Fragments []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
+				Type      string `json:"type"`
+				Text      string `json:"text"`
 				Cheermote struct {
 					Prefix string `json:"prefix"`
 					Bits   int    `json:"bits"`
@@ -106,10 +107,10 @@ type ChatMessageEvent struct {
 				} `json:"cheermote"`
 			} `json:"fragments"`
 		} `json:"message"`
-		Color     string    `json:"color"`
-		Badges    []string  `json:"badges"`
-		MessageType string  `json:"message_type"`
-		SentAt    time.Time `json:"sent_at"`
+		Color       string    `json:"color"`
+		Badges      []string  `json:"badges"`
+		MessageType string    `json:"message_type"`
+		SentAt      time.Time `json:"sent_at"`
 	} `json:"event"`
 }
 
@@ -200,12 +201,41 @@ type RewardEvent struct {
 		UserName             string `json:"user_name"`
 		UserInput            string `json:"user_input"`
 		Status               string `json:"status"`
-		Reward              struct {
+		Reward               struct {
 			ID     string `json:"id"`
 			Title  string `json:"title"`
 			Cost   int    `json:"cost"`
 			Prompt string `json:"prompt"`
 		} `json:"reward"`
 		RedeemedAt time.Time `json:"redeemed_at"`
+	} `json:"event"`
+}
+
+// SubscriptionEvent a response event from Twitch
+type SubscriptionEvent struct {
+	Subscription struct {
+		ID        string `json:"id"`
+		Type      string `json:"type"`
+		Version   string `json:"version"`
+		Status    string `json:"status"`
+		Cost      int    `json:"cost"`
+		Condition struct {
+			BroadcasterUserID string `json:"broadcaster_user_id"`
+		} `json:"condition"`
+		Transport struct {
+			Method   string `json:"method"`
+			Callback string `json:"callback"`
+		} `json:"transport"`
+		CreatedAt time.Time `json:"created_at"`
+	} `json:"subscription"`
+	Event struct {
+		UserID               string `json:"user_id"`
+		UserLogin            string `json:"user_login"`
+		UserName             string `json:"user_name"`
+		BroadcasterUserID    string `json:"broadcaster_user_id"`
+		BroadcasterUserLogin string `json:"broadcaster_user_login"`
+		BroadcasterUserName  string `json:"broadcaster_user_name"`
+		Tier                 string `json:"tier"`
+		IsGift               bool   `json:"is_gift"`
 	} `json:"event"`
 }

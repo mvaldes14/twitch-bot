@@ -25,25 +25,13 @@ const (
 	DOPPLER_API_URL  = "https://api.doppler.com/v3/configs/config/secrets"
 )
 
-// SecretManager interface defines the contract for managing secrets
-type SecretManager interface {
-	// GetUserToken retrieves the user token from environment
-	GetUserToken() string
-	// BuildSecretHeaders builds headers for Twitch API requests
-	BuildSecretHeaders() RequestHeader
-	// GenerateNewToken generates a new token using refresh token
-	GenerateNewToken() TwitchRefreshResponse
-	// StoreNewTokens stores new tokens in Doppler
-	StoreNewTokens(tokens TwitchRefreshResponse) bool
-}
-
 // SecretService implements SecretManager interface
 type SecretService struct {
 	Logger *slog.Logger
 }
 
 // NewSecretService creates a new instance of SecretService
-func NewSecretService(logger *slog.Logger) SecretManager {
+func NewSecretService(logger *slog.Logger) *SecretService {
 	return &SecretService{
 		Logger: logger,
 	}

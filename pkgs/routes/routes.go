@@ -16,7 +16,7 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 )
 
-// RequestJson represents a JSON HTTP request
+// RequestJSON represents a JSON HTTP request
 type RequestJson struct {
 	Method  string
 	URL     string
@@ -27,14 +27,14 @@ type RequestJson struct {
 // Router is the struct that handles all routes
 type Router struct {
 	Log     *slog.Logger
-	Subs    subscriptions.SubscriptionsMethods
-	Secrets secrets.SecretManager
+	Subs    *subscriptions.Subscription
+	Secrets *secrets.SecretService
 	Actions *actions.Actions
 	Spotify *spotify.Spotify
 }
 
 // NewRouter creates a new router
-func NewRouter(logger *slog.Logger, subs subscriptions.SubscriptionsMethods, secretService secrets.SecretManager) *Router {
+func NewRouter(logger *slog.Logger, subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
 	actions := actions.NewActions(logger, secretService)
 	spotify := spotify.NewSpotify(logger)
 	return &Router{

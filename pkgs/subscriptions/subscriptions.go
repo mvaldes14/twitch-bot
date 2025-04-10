@@ -15,22 +15,22 @@ import (
 // URl endpoint for all twitch subscriptions
 const url = "https://api.twitch.tv/helix/eventsub/subscriptions"
 
-// type SubscriptionsMethods is the interface that handles all subscriptions
-type SubscriptionsMethods interface {
-	CreateSubscription(payload string) *http.Response
-	GetSubscriptions() ValidateSubscription
-	CleanSubscriptions(subs ValidateSubscription)
-	DeleteSubscription(id int)
-}
+// // type SubscriptionsMethods is the interface that handles all subscriptions
+// type SubscriptionsMethods interface {
+// 	CreateSubscription(payload string) *http.Response
+// 	GetSubscriptions() ValidateSubscription
+// 	CleanSubscriptions(subs ValidateSubscription)
+// 	DeleteSubscription(id int)
+// }
 
 // type Subscription is the struct that handles all subscriptions
 type Subscription struct {
 	Log     *slog.Logger
-	Secrets secrets.SecretManager
+	Secrets *secrets.SecretService
 }
 
 // NewSubscription creates a new subscription
-func NewSubscription(logger *slog.Logger, secretService secrets.SecretManager) *Subscription {
+func NewSubscription(logger *slog.Logger, secretService *secrets.SecretService) *Subscription {
 	return &Subscription{
 		Log:     logger,
 		Secrets: secretService,
