@@ -8,6 +8,8 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/routes"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // NewServer creates the http server
@@ -29,6 +31,13 @@ func NewServer(logger *slog.Logger, port string) *http.Server {
 	router.HandleFunc("/reward", rs.RewardHandler)
 	router.HandleFunc("/stream", rs.StreamHandler)
 	router.HandleFunc("/health", rs.HealthHandler)
+	router.Handle("/metrics", promhttp.Handler())
+	router.HandleFunc("/testmetrics", func(w http.ResponseWriter, r *http.Request) {
+		telemetry.TestMetric.Inc()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("{\"status\": \"ok\"}"))
+	})
 	logger.Info("Running and listening")
 
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
