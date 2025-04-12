@@ -2,19 +2,57 @@
 package telemetry
 
 import (
+	"encoding/json"
 	"fmt"
-	"log/slog"
+	"log"
 	"os"
+	"time"
 )
 
-// TODO: Redo this with our custom logging implementation for INFO,ERROR in JSON
-type Log struct{}
-
-// NewLogger Returns a logger in json for the bot
-func NewLogger() *slog.Logger {
-	return slog.New(slog.NewJSONHandler(os.Stdout, nil))
+// Logger is a custom logger that gets a prefix from the package it was called from
+type CustomLogger struct {
+	module string
+	logger *log.Logger
 }
 
-func (l Log) Info(msg string) {
-	fmt.Sprintf("INFO: %v", msg)
+type logMessage struct {
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+	Module    string `json:"module"`
+	Error     error  `json:"error,omitempty"`
+}
+
+// example log format
+//{time:unixRFC, loglevel:info/error, msg:any }
+
+// NewLogger Returns a logger in json for the bot
+func NewLogger(module string) *CustomLogger {
+	logger := log.New(os.Stdout, module, 0)
+	return &CustomLogger{module, logger}
+}
+
+// Info logs an info message
+func (l CustomLogger) Info(msg string, fields ...any) {
+	timestamp := time.Now().Format(time.RFC3339)
+	event := logMessage{
+		Timestamp: timestamp,
+		Level:     "info",
+		Message:   msg,
+		Module:    l.module,
+	}
+	json.NewEncoder(l.logger.Writer()).Encode(event)
+}
+
+// Info logs an info message
+func (l CustomLogger) Error(msg string, err error) {
+	timestamp := time.Now().Format(time.RFC3339)
+	event := logMessage{
+		Timestamp: timestamp,
+		Level:     "error",
+		Message:   msg,
+		Module:    l.module,
+		Error:     err,
+	}
+	json.NewEncoder(l.logger.Writer()).Encode(event)
 }

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
+
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
 const (
@@ -27,14 +28,13 @@ const (
 
 // SecretService implements SecretManager interface
 type SecretService struct {
-	Logger *slog.Logger
+	Log *telemetry.CustomLogger
 }
 
 // NewSecretService creates a new instance of SecretService
-func NewSecretService(logger *slog.Logger) *SecretService {
-	return &SecretService{
-		Logger: logger,
-	}
+func NewSecretService() *SecretService {
+	logger := telemetry.NewLogger("secrets")
+	return &SecretService{Log: logger}
 }
 
 // GetUserToken retrieves the user token from environment
@@ -69,7 +69,7 @@ func (s *SecretService) GenerateNewToken() TwitchRefreshResponse {
 	}
 	var response TwitchRefreshResponse
 	if err := s.MakeRequestMarshallJson(&req, &response); err != nil {
-		s.Logger.Error("Error", "Making Execution", req.URL, "Failed:", err)
+		s.Log.Error("Failed to make request", err)
 	}
 	return response
 }
@@ -84,10 +84,10 @@ func (s *SecretService) MakeRequestMarshallJson(req *RequestJson, target interfa
 		httpReq.Header.Set(k, v)
 	}
 	client := &http.Client{}
-	s.Logger.Info("Sending request")
+	s.Log.Info("Sending request")
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		s.Logger.Error("Error", "Sending request:", err)
+		s.Log.Error("Sending request:", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -118,10 +118,10 @@ func (s *SecretService) StoreNewTokens(tokens TwitchRefreshResponse) bool {
 		Payload: payload,
 		Headers: headers,
 	}
-	s.Logger.Info("Storing new tokens in doppler")
+	s.Log.Info("Storing new tokens in doppler")
 	var response DopplerSecretUpdate
 	if err := s.MakeRequestMarshallJson(&req, &response); err != nil {
-		s.Logger.Error("Error", "Making Execution", req.URL, "Failed:", err)
+		s.Log.Error("Failed to send request", err)
 		return false
 	}
 	return response.Success

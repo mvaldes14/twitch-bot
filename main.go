@@ -8,12 +8,15 @@ import (
 
 func main() {
 	const port = ":3000"
-	logger := telemetry.NewLogger()
+	logger := telemetry.NewLogger("main")
 
-	srv := server.NewServer(logger, port)
+	srv := server.NewServer(port)
 
-	logger.Info("INFO", "Starting server on port", port)
+	// logger.Info("INFO", "Starting server on port", port)
+	logger.Info("Starting server")
 	if err := srv.ListenAndServe(); err != nil {
-		logger.Error("Could not start server", "error", err)
+		// logger.Error("Could not start server", "error", err)
+		logger.Info("Error Starting server")
+
 	}
 }

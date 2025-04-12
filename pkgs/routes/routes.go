@@ -3,9 +3,9 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -14,6 +14,7 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
 // RequestJSON represents a JSON HTTP request
@@ -26,17 +27,18 @@ type RequestJson struct {
 
 // Router is the struct that handles all routes
 type Router struct {
-	Log     *slog.Logger
 	Subs    *subscriptions.Subscription
 	Secrets *secrets.SecretService
 	Actions *actions.Actions
 	Spotify *spotify.Spotify
+	Log     *telemetry.CustomLogger
 }
 
 // NewRouter creates a new router
-func NewRouter(logger *slog.Logger, subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
-	actions := actions.NewActions(logger, secretService)
-	spotify := spotify.NewSpotify(logger)
+func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
+	actions := actions.NewActions(secretService)
+	spotify := spotify.NewSpotify()
+	logger := telemetry.NewLogger("router")
 	return &Router{
 		Log:     logger,
 		Subs:    subs,
@@ -149,9 +151,9 @@ func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
 	if subTypeConfig, ok := subscriptionTypes[subType]; ok {
 		payload := rt.GeneratePayload(subTypeConfig)
 		rt.Subs.CreateSubscription(payload)
-		rt.Log.Info("Subscription created", "type", subType)
+		rt.Log.Info("Subscription created")
 	} else {
-		rt.Log.Error("Invalid subscription", "type", subType)
+		rt.Log.Error("Invalid subscription", errors.New("Could not generate a valid subscription"))
 	}
 }
 
@@ -241,19 +243,19 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 	err := discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
-		rt.Log.Error("Error", "sending message to discord", err)
+		rt.Log.Error("sending message to discord", err)
 	}
 	req, err := http.NewRequest("POST", "https://automate.mvaldes.dev/webhook/stream-live", nil)
 	if err != nil {
-		rt.Log.Error("Error", "could not generate request for x post", err)
+		rt.Log.Error("could not generate request for x post", err)
 	}
 	req.Header.Add("Token", os.Getenv("ADMIN_TOKEN"))
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		rt.Log.Error("Error", "Could not send request to webhook for X post", err)
+		rt.Log.Error("Could not send request to webhook for X post", err)
 	}
 	if resp.StatusCode == 200 {
-		rt.Log.Info("Info", "posting tweet to X", " ")
+		rt.Log.Info("posting tweet to X")
 	}
 }

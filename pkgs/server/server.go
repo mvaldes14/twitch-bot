@@ -2,7 +2,6 @@
 package server
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/routes"
@@ -13,10 +12,10 @@ import (
 )
 
 // NewServer creates the http server
-func NewServer(logger *slog.Logger, port string) *http.Server {
-	secretService := secrets.NewSecretService(logger)
-	subs := subscriptions.NewSubscription(logger, secretService)
-	rs := routes.NewRouter(logger, subs, secretService)
+func NewServer(port string) *http.Server {
+	secretService := secrets.NewSecretService()
+	subs := subscriptions.NewSubscription(secretService)
+	rs := routes.NewRouter(subs, secretService)
 	api := http.NewServeMux()
 	api.HandleFunc("/create", rs.CreateHandler)
 	api.HandleFunc("/delete", rs.DeleteHandler)
@@ -38,7 +37,7 @@ func NewServer(logger *slog.Logger, port string) *http.Server {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("{\"status\": \"ok\"}"))
 	})
-	logger.Info("Running and listening")
+	// logger.Info("Running and listening")
 
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
 

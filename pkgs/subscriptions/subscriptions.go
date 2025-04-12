@@ -6,34 +6,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
 // URl endpoint for all twitch subscriptions
 const url = "https://api.twitch.tv/helix/eventsub/subscriptions"
 
-// // type SubscriptionsMethods is the interface that handles all subscriptions
-// type SubscriptionsMethods interface {
-// 	CreateSubscription(payload string) *http.Response
-// 	GetSubscriptions() ValidateSubscription
-// 	CleanSubscriptions(subs ValidateSubscription)
-// 	DeleteSubscription(id int)
-// }
-
 // type Subscription is the struct that handles all subscriptions
 type Subscription struct {
-	Log     *slog.Logger
 	Secrets *secrets.SecretService
+	Log     *telemetry.CustomLogger
 }
 
 // NewSubscription creates a new subscription
-func NewSubscription(logger *slog.Logger, secretService *secrets.SecretService) *Subscription {
+func NewSubscription(secretService *secrets.SecretService) *Subscription {
+	log := telemetry.NewLogger("subscriptions")
 	return &Subscription{
-		Log:     logger,
 		Secrets: secretService,
+		Log:     log,
 	}
 }
 
@@ -55,13 +48,13 @@ func (s *Subscription) CreateSubscription(payload string) *http.Response {
 	s.Log.Info("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		s.Log.Error("Error sending request:", "caused by", err)
+		s.Log.Error("Error sending request:", err)
 		return nil
 	}
 	defer resp.Body.Close()
-	s.Log.Info("Subscription response:", "info", resp.StatusCode)
+	s.Log.Info(string(resp.StatusCode))
 	body, _ := io.ReadAll(resp.Body)
-	s.Log.Info("Subscription", "message", string(body))
+	s.Log.Info(string(body))
 	return resp
 }
 
@@ -75,7 +68,7 @@ func (s *Subscription) GetSubscriptions() ValidateSubscription {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		s.Log.Error("Error sending request:", "caused by", err)
+		s.Log.Error("Error sending request:", err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	var subscriptionList ValidateSubscription
@@ -121,6 +114,6 @@ func (s *Subscription) DeleteSubscription(id int) {
 	client := &http.Client{}
 	resp, _ := client.Do(req)
 	if resp.StatusCode == http.StatusNoContent {
-		s.Log.Info("Subscription deleted", "name:", id)
+		s.Log.Info(string(id))
 	}
 }

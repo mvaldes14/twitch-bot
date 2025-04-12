@@ -7,10 +7,13 @@ import (
 )
 
 var (
+	// TestMetric is a test metric to check instrumentation
 	TestMetric = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "test_metric",
 		Help: "A test metric",
 	})
+	SubscriptionCount = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "subscription_count",
+		Help: "Number of subscriptions active",
+	})
 )
-
-// this is gonna be for prometheus metrics eventually

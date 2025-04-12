@@ -32,7 +32,7 @@ func (rt *Router) MakeRequestMarshallJson(r *RequestJson, jsonType interface{}) 
 	rt.Log.Info("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		rt.Log.Error("Error", "Sending request:", err)
+		rt.Log.Error("Sending request:", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -42,7 +42,7 @@ func (rt *Router) MakeRequestMarshallJson(r *RequestJson, jsonType interface{}) 
 
 // GeneratePayload Builds the payload for each subscription type
 func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string {
-	rt.Log.Info("Generating payload for subscription type", "type", subType.Name)
+	rt.Log.Info("Generating payload for subscription type")
 	var payload string
 
 	// Define the condition based on subscription type
