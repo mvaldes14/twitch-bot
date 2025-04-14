@@ -61,11 +61,12 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!song":
 		song := a.Spotify.GetSong(a.Spotify.RefreshToken())
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
+		a.Log.Info(msg)
 		a.SendMessage(msg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
-		a.Log.Info("Today command")
+		a.Log.Info("Today command running")
 		a.updateChannel(msg)
 	}
 }
@@ -80,12 +81,14 @@ func (a *Actions) SendMessage(text string) error {
 
 	payload, err := json.Marshal(message)
 	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
+		a.Log.Error("Failed to marshal message:", err)
+		return err
 	}
 
 	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		a.Log.Error("Failed to create request", err)
+		return err
 	}
 
 	headers := a.Secrets.BuildSecretHeaders()
@@ -96,12 +99,14 @@ func (a *Actions) SendMessage(text string) error {
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send message: %w", err)
+		a.Log.Error("failed to send message: %w", err)
+		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		a.Log.Info("Unexpected status code while sending message" + string(res.StatusCode))
+		return err
 	}
 
 	return nil
@@ -120,7 +125,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
       "broadcaster_language":"es"}`,
 			softwareID, msg)
-		a.Log.Info("Today Command Payload")
+		a.Log.Info("Today Command Ran")
 
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))

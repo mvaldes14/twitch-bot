@@ -7,17 +7,32 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
+// Discord struct to hold the logger
+type Discord struct {
+	Log *telemetry.CustomLogger
+}
+
+// NewDiscord create a new discord instance
+func NewDiscord() *Discord {
+	logger := *telemetry.NewLogger("discord")
+	return &Discord{
+		Log: &logger,
+	}
+}
+
 // NotifyChannel sends a message to a discord channel
-func NotifyChannel(msg string) error {
-	fmt.Println("Sending message to discord")
+func (d *Discord) NotifyChannel(msg string) error {
+	d.Log.Info("Sending message to discord")
 	url := os.Getenv("DISCORD_WEBHOOK")
 	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		fmt.Println(err)
+		d.Log.Error("Failed to generate payload for discord", err)
 		return err
 	}
 
@@ -30,8 +45,9 @@ func NotifyChannel(msg string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return errors.New("Error sending message to discord")
+		err := errors.New("Error sending message to discord")
+		d.Log.Error("Error sending message to discord", err)
+		return err
 	}
 	return nil
-
 }

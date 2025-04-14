@@ -32,6 +32,7 @@ type Spotify struct {
 	Log *telemetry.CustomLogger
 }
 
+// NewSpotify creates a new spotify instance
 func NewSpotify() *Spotify {
 	logger := telemetry.NewLogger("spotify")
 	return &Spotify{
@@ -39,7 +40,7 @@ func NewSpotify() *Spotify {
 	}
 }
 
-// refreshtoken generates a new token for the spotify api
+// RefreshToken generates a new token for the spotify api
 func (s *Spotify) RefreshToken() string {
 	s.Log.Info("Refreshing token")
 	refreshToken := os.Getenv("SPOTIFY_REFRESH_TOKEN")
@@ -136,8 +137,6 @@ func (s *Spotify) AddToPlaylist(token string, song string) {
 	if s.validateURL(song) {
 		addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
 		songID := s.parseSong(song)
-		// position := getPlaylist(token)
-		// body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position-1)
 		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"]}", songID)
 		req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
 		if err != nil {
@@ -150,7 +149,7 @@ func (s *Spotify) AddToPlaylist(token string, song string) {
 		if err != nil {
 			s.Log.Error("Error sending request to add to playlist", err)
 		}
-		s.Log.Info(string(res.StatusCode))
+		s.Log.Info("Adding song to playlist" + res.Status)
 	}
 }
 

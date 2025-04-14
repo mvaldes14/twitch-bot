@@ -12,11 +12,9 @@ func main() {
 
 	srv := server.NewServer(port)
 
-	// logger.Info("INFO", "Starting server on port", port)
-	logger.Info("Starting server")
+	logger.Info("Starting server on port" + port)
 	if err := srv.ListenAndServe(); err != nil {
-		// logger.Error("Could not start server", "error", err)
-		logger.Info("Error Starting server")
+		logger.Error("Could not start server", err)
 
 	}
 }

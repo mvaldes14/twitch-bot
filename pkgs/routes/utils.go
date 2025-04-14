@@ -1,3 +1,4 @@
+// package routes handles all routes
 package routes
 
 import (
@@ -17,8 +18,8 @@ const (
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
-// MakeRequestMarshallJson receives a request and marshals the response into a struct
-func (rt *Router) MakeRequestMarshallJson(r *RequestJson, jsonType interface{}) error {
+// MakeRequestMarshallJSON receives a request and marshals the response into a struct
+func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 	req, err := http.NewRequest(r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
 	if err != nil {
 		return nil
@@ -29,10 +30,10 @@ func (rt *Router) MakeRequestMarshallJson(r *RequestJson, jsonType interface{}) 
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	rt.Log.Info("Sending request")
+	rt.Log.Info("Sending request to Twitch API")
 	resp, err := client.Do(req)
 	if err != nil {
-		rt.Log.Error("Sending request:", err)
+		rt.Log.Error("Error sending request to Twitch:", err)
 		return err
 	}
 	defer resp.Body.Close()
