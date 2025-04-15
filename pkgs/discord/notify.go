@@ -11,6 +11,10 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
+const (
+	discordWebhookURL = "DISCORD_WEBHOOK"
+)
+
 // Discord struct to hold the logger
 type Discord struct {
 	Log *telemetry.CustomLogger
@@ -27,7 +31,7 @@ func NewDiscord() *Discord {
 // NotifyChannel sends a message to a discord channel
 func (d *Discord) NotifyChannel(msg string) error {
 	d.Log.Info("Sending message to discord")
-	url := os.Getenv("DISCORD_WEBHOOK")
+	url := os.Getenv(discordWebhookURL)
 	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")

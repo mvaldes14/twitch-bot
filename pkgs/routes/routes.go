@@ -17,6 +17,16 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
+const (
+	adminToken = "ADMIN_TOKEN"
+)
+
+var (
+	errorTokenNotFound       = errors.New("Token not found")
+	errorTokenNotValid       = errors.New("Token not valid")
+	errorInvalidSbuscription = errors.New("Could not generate a valid subscription")
+)
+
 // RequestJSON represents a JSON HTTP request
 type RequestJSON struct {
 	Method  string
@@ -55,18 +65,18 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rt.Log.Info("Checking for admin token")
-		token := os.Getenv("ADMIN_TOKEN")
+		token := os.Getenv(adminToken)
 		if token == "" {
-			rt.Log.Error("Token not found in environment", errors.New("Token not found"))
+			rt.Log.Error("Token not found in environment", errorTokenNotFound)
 			w.WriteHeader(http.StatusUnauthorized)
+			return
 		}
 		if r.Header.Get("Token") == token {
 			rt.Log.Info("Token is valid")
 			next.ServeHTTP(w, r)
 		} else {
-			rt.Log.Error("Token is invalid", errors.New("Token not valid"))
+			rt.Log.Error("Token is invalid", errorTokenNotValid)
 			w.WriteHeader(http.StatusUnauthorized)
-			return
 		}
 	})
 }
@@ -167,7 +177,7 @@ func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
 		rt.Subs.CreateSubscription(payload)
 		rt.Log.Info("Subscription created: " + subType)
 	} else {
-		rt.Log.Error("Invalid subscription", errors.New("Could not generate a valid subscription"))
+		rt.Log.Error("Invalid subscription", errorInvalidSbuscription)
 	}
 }
 
@@ -263,7 +273,7 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		rt.Log.Error("Could not generate request for X post", err)
 	}
-	req.Header.Add("Token", os.Getenv("ADMIN_TOKEN"))
+	req.Header.Add("Token", os.Getenv(adminToken))
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

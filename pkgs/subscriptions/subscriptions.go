@@ -12,8 +12,10 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
-// URL endpoint for all twitch subscriptions
-const URL = "https://api.twitch.tv/helix/eventsub/subscriptions"
+const (
+	// URL endpoint for all twitch subscriptions
+	URL = "https://api.twitch.tv/helix/eventsub/subscriptions"
+)
 
 // Subscription is the struct that handles all subscriptions
 type Subscription struct {

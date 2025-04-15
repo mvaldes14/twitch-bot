@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,13 +19,16 @@ import (
 var currentToken string
 
 const (
-	tokenURL          = "https://accounts.spotify.com/api/token"
-	nextURL           = "https://api.spotify.com/v1/me/player/next"              // POST
-	currentURL        = "https://api.spotify.com/v1/me/player/currently-playing" // GET
-	playlistID        = "72Cwey4JPR3DV3cdUS72xG"
-	playlistURL       = "https://api.spotify.com/v1/playlists/" // +id GET
-	getPlaylistURL    = "https://api.spotify.com/v1/playlists/" // +id/tracks GET
-	deletePlaylistURL = "https://api.spotify.com/v1/playlists/" // +id/tracks DELETE
+	tokenURL            = "https://accounts.spotify.com/api/token"
+	nextURL             = "https://api.spotify.com/v1/me/player/next"              // POST
+	currentURL          = "https://api.spotify.com/v1/me/player/currently-playing" // GET
+	playlistID          = "72Cwey4JPR3DV3cdUS72xG"
+	playlistURL         = "https://api.spotify.com/v1/playlists/" // +id GET
+	getPlaylistURL      = "https://api.spotify.com/v1/playlists/" // +id/tracks GET
+	deletePlaylistURL   = "https://api.spotify.com/v1/playlists/" // +id/tracks DELETE
+	spotifyRefreshToken = "SPOTIFY_REFRESH_TOKEN"
+	spotifyClientID     = "SPOTIFY_CLIENT_ID"
+	spotifyClientSecret = "SPOTIFY_CLIENT_SECRET"
 )
 
 // Spotify struct for spotify
@@ -43,9 +47,12 @@ func NewSpotify() *Spotify {
 // RefreshToken generates a new token for the spotify api
 func (s *Spotify) RefreshToken() string {
 	s.Log.Info("Refreshing token")
-	refreshToken := os.Getenv("SPOTIFY_REFRESH_TOKEN")
-	clientID := os.Getenv("SPOTIFY_CLIENT_ID")
-	clientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	refreshToken := os.Getenv(spotifyRefreshToken)
+	clientID := os.Getenv(spotifyClientID)
+	clientSecret := os.Getenv(spotifyClientSecret)
+	if refreshToken == "" || clientID == "" || clientSecret == "" {
+		s.Log.Error("Missing spotify credentials in environment variables", errors.New("Missing credentials"))
+	}
 	token := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
 	params := url.Values{}
 	params.Set("grant_type", "refresh_token")

@@ -15,6 +15,5 @@ func main() {
 	logger.Info("Starting server on port" + port)
 	if err := srv.ListenAndServe(); err != nil {
 		logger.Error("Could not start server", err)
-
 	}
 }

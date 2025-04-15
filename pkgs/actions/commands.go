@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
@@ -91,7 +92,10 @@ func (a *Actions) SendMessage(text string) error {
 		return err
 	}
 
-	headers := a.Secrets.BuildSecretHeaders()
+	headers, err := a.Secrets.BuildSecretHeaders()
+	if err != nil {
+		a.Log.Error("Failed to build headers to send message", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -105,7 +109,7 @@ func (a *Actions) SendMessage(text string) error {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		a.Log.Info("Unexpected status code while sending message" + string(res.StatusCode))
+		a.Log.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
 		return err
 	}
 
@@ -134,7 +138,10 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			return
 		}
 
-		headers := a.Secrets.BuildSecretHeaders()
+		headers, err := a.Secrets.BuildSecretHeaders()
+		if err != nil {
+			a.Log.Error("Failed to build headers to update channel", err)
+		}
 		userToken := a.Secrets.GetUserToken()
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
