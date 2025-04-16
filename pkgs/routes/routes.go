@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	errorTokenNotFound       = errors.New("Token not found")
-	errorTokenNotValid       = errors.New("Token not valid")
+	errorTokenNotFound       = errors.New("Token not found for API protected routes")
+	errorTokenNotValid       = errors.New("Token not valid for API protected routes")
 	errorInvalidSbuscription = errors.New("Could not generate a valid subscription")
 )
 
@@ -64,10 +64,11 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 // CheckAuthAdmin validates for headers for admin routes
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		telemetry.APICallCount.Inc()
 		rt.Log.Info("Checking for admin token")
 		token := os.Getenv(adminToken)
 		if token == "" {
-			rt.Log.Error("Token not found in environment", errorTokenNotFound)
+			rt.Log.Error("Admin Token missing", errorTokenNotFound)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -75,7 +76,7 @@ func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 			rt.Log.Info("Token is valid")
 			next.ServeHTTP(w, r)
 		} else {
-			rt.Log.Error("Token is invalid", errorTokenNotValid)
+			rt.Log.Error("Admin Token is invalid", errorTokenNotValid)
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
@@ -196,6 +197,7 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 
 // FollowHandler responds to follow events
 func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.FollowCount.Inc()
 	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -217,6 +219,7 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &subEventResponse)
 	// send to chat
+	telemetry.SubscriptionCount.Inc()
 	rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
 }
 
@@ -230,6 +233,7 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &cheerEventResponse)
 	// send to chat
+	telemetry.CheerCount.Inc()
 	rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
 }
 
@@ -242,6 +246,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
+	telemetry.RewardCount.Inc()
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
 		token := rt.Spotify.RefreshToken()
 		rt.Spotify.NextSong(token)
