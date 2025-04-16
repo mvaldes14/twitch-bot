@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-
-	"github.com/mvaldes14/twitch-bot/pkgs/types"
-	"github.com/mvaldes14/twitch-bot/pkgs/utils"
 )
+
+var currentToken string
 
 const (
 	tokenURL          = "https://accounts.spotify.com/api/token"
@@ -26,14 +26,20 @@ const (
 	deletePlaylistURL = "https://api.spotify.com/v1/playlists/" // +id/tracks DELETE
 )
 
-var (
-	currentToken string
-	logger       = utils.Logger()
-)
+// Spotify struct for spotify
+type Spotify struct {
+	Log *slog.Logger
+}
 
-// RefreshToken generates a new token for the spotify api
-func RefreshToken() string {
-	logger.Info("Refreshing token")
+func NewSpotify(logger *slog.Logger) *Spotify {
+	return &Spotify{
+		Log: logger,
+	}
+}
+
+// refreshtoken generates a new token for the spotify api
+func (s *Spotify) RefreshToken() string {
+	s.Log.Info("Refreshing token")
 	refreshToken := os.Getenv("SPOTIFY_REFRESH_TOKEN")
 	clientID := os.Getenv("SPOTIFY_CLIENT_ID")
 	clientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
@@ -44,78 +50,78 @@ func RefreshToken() string {
 
 	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		logger.Error("Error Generating Request for token refresh", err)
+		s.Log.Error("Error Generating Request for token refresh", "error", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Basic "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error Sending Request for token refresh", err)
+		s.Log.Error("Error Sending Request for token refresh", err)
 	}
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Error("Error from token refresh request", err)
+		s.Log.Error("Error from token refresh request", err)
 	}
-	var t types.SpotifyTokenResponse
+	var t SpotifyTokenResponse
 	json.Unmarshal(resBody, &t)
 	currentToken = t.AccessToken
 	return t.AccessToken
 }
 
 // NextSong Changes the currently playing song
-func NextSong(token string) {
+func (s *Spotify) NextSong(token string) {
 	req, err := http.NewRequest("POST", nextURL, nil)
 	if err != nil {
-		logger.Error("Error Generating Request for next song", err)
+		s.Log.Error("Error Generating Request for next song", "error", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error Sending Request for next song", err)
+		s.Log.Error("Error Sending Request for next song", "error", err)
 	}
 	// Token is valid
 	if res.StatusCode == http.StatusNoContent {
-		logger.Info("Song changed")
+		s.Log.Info("Song changed")
 	}
 	// Token is invalid
 	if res.StatusCode == http.StatusUnauthorized {
-		logger.Info("Unauthorized")
-		token := RefreshToken()
-		NextSong(token)
+		s.Log.Info("Unauthorized")
+		token := s.RefreshToken()
+		s.NextSong(token)
 	}
 }
 
 // GetSong returns the current song playing via chat
-func GetSong(token string) types.SpotifyCurrentlyPlaying {
+func (s *Spotify) GetSong(token string) SpotifyCurrentlyPlaying {
 	req, err := http.NewRequest("GET", currentURL, nil)
 	if err != nil {
-		logger.Error("Error Generating Request for get song", err)
+		s.Log.Error("Error Generating Request for get song", "error", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error Sending Request for get song", err)
+		s.Log.Error("Error Sending Request for get song", "error", err)
 	}
 	// Token is valid
 	if res.StatusCode == http.StatusOK {
-		logger.Info("Song found")
+		s.Log.Info("Song found")
 	}
 	// Token is invalid
 	if res.StatusCode == http.StatusUnauthorized {
-		logger.Info("Unauthorized")
-		token := RefreshToken()
-		GetSong(token)
+		s.Log.Info("Unauthorized")
+		token := s.RefreshToken()
+		s.GetSong(token)
 	}
 	body, err := io.ReadAll(res.Body)
-	var currentlyPlaying types.SpotifyCurrentlyPlaying
+	var currentlyPlaying SpotifyCurrentlyPlaying
 	json.Unmarshal(body, &currentlyPlaying)
 	return currentlyPlaying
 }
 
-func parseSong(url string) string {
+func (s *Spotify) parseSong(url string) string {
 	splitURL := strings.Split(url, "/")
 	trackID := splitURL[len(splitURL)-1]
 	splitTrackID := strings.Split(trackID, "?")
@@ -124,69 +130,69 @@ func parseSong(url string) string {
 }
 
 // AddToPlaylist includes a song to the playlist
-func AddToPlaylist(token string, song string) {
-	if validateURL(song) {
+func (s *Spotify) AddToPlaylist(token string, song string) {
+	if s.validateURL(song) {
 		addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", playlistID)
-		songID := parseSong(song)
+		songID := s.parseSong(song)
 		// position := getPlaylist(token)
 		// body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"], \"position\":\"%v\"}", songID, position-1)
 		body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"]}", songID)
 		req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
 		if err != nil {
-			logger.Error("Cannot construct request with parameters given", err, "Add To Playlist")
+			s.Log.Error("Cannot construct request with parameters given", "error", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
 		client := &http.Client{}
 		res, err := client.Do(req)
 		if err != nil {
-			logger.Error("Error sending request to add to playlist", err)
+			s.Log.Error("Error sending request to add to playlist", "error", err)
 		}
-		logger.Info(string(res.StatusCode))
+		s.Log.Info(string(res.StatusCode))
 	}
 }
 
-func validateURL(url string) bool {
+func (s *Spotify) validateURL(url string) bool {
 	if strings.Contains(url, "https://open.spotify.com/") {
 		return true
 	}
 	return false
 }
 
-func getPlaylist(token string) int {
+func (s *Spotify) getPlaylist(token string) int {
 	req, err := http.NewRequest("GET", playlistURL+playlistID, nil)
 	if err != nil {
-		logger.Error("Cannot construct request with parameters given", err, "Get Playlist")
+		s.Log.Error("Cannot construct request with parameters given", err, "Get Playlist")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error sending request to get playlist", err)
+		s.Log.Error("Error sending request to get playlist", err)
 	}
 	body, err := io.ReadAll(res.Body)
-	var playlist types.SpotifyPlaylistResponse
+	var playlist SpotifyPlaylistResponse
 	json.Unmarshal(body, &playlist)
 	return playlist.Tracks.Total
 }
 
-func getSongsPlaylist(playlistID, token string) []string {
+func (s *Spotify) getSongsPlaylist(playlistID, token string) []string {
 	req, err := http.NewRequest("GET", getPlaylistURL+playlistID+"/tracks?", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		logger.Error("Error Generating Request for get song playlist", err)
+		s.Log.Error("Error Generating Request for get song playlist", err)
 	}
 
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error Sending Request for get song playlist", err)
+		s.Log.Error("Error Sending Request for get song playlist", err)
 	}
-	var playstResponse types.SpotifyPlaylistItemList
+	var playstResponse SpotifyPlaylistItemList
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Error("Error parsing body from get song playlist", err)
+		s.Log.Error("Error parsing body from get song playlist", err)
 	}
 	json.Unmarshal(body, &playstResponse)
 
@@ -198,28 +204,28 @@ func getSongsPlaylist(playlistID, token string) []string {
 }
 
 // DeleteSongPlaylist wipes the playlist to start fresh
-func DeleteSongPlaylist(token string) {
-	songs := getSongsPlaylist(playlistID, token)
-	formatSongs := generateURISongs(songs)
+func (s *Spotify) DeleteSongPlaylist(token string) {
+	songs := s.getSongsPlaylist(playlistID, token)
+	formatSongs := s.generateURISongs(songs)
 	body := fmt.Sprintf("{\"tracks\":[%v]}", strings.Join(formatSongs, ","))
 	req, err := http.NewRequest("DELETE", deletePlaylistURL+playlistID+"tracks", bytes.NewBuffer([]byte(body)))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		logger.Error("Error Generating Request for delete playlist", err)
+		s.Log.Error("Error Generating Request for delete playlist", err)
 	}
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error Sending Request for delete playlist", err)
+		s.Log.Error("Error Sending Request for delete playlist", err)
 	}
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(res.Body)
-		logger.Info(string(body))
+		s.Log.Info(string(body))
 	}
 }
 
-func generateURISongs(songs []string) []string {
+func (s *Spotify) generateURISongs(songs []string) []string {
 	var songStructs []string
 	for _, song := range songs {
 		songStructs = append(songStructs, fmt.Sprintf("{\"uri\":\"spotify:track:%v\"}", song))

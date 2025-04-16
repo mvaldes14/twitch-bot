@@ -6,64 +6,85 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
-	"github.com/mvaldes14/twitch-bot/pkgs/types"
-	"github.com/mvaldes14/twitch-bot/pkgs/utils"
+	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 )
 
+// URl endpoint for all twitch subscriptions
 const url = "https://api.twitch.tv/helix/eventsub/subscriptions"
 
-var logger = utils.Logger()
+// // type SubscriptionsMethods is the interface that handles all subscriptions
+// type SubscriptionsMethods interface {
+// 	CreateSubscription(payload string) *http.Response
+// 	GetSubscriptions() ValidateSubscription
+// 	CleanSubscriptions(subs ValidateSubscription)
+// 	DeleteSubscription(id int)
+// }
+
+// type Subscription is the struct that handles all subscriptions
+type Subscription struct {
+	Log     *slog.Logger
+	Secrets *secrets.SecretService
+}
+
+// NewSubscription creates a new subscription
+func NewSubscription(logger *slog.Logger, secretService *secrets.SecretService) *Subscription {
+	return &Subscription{
+		Log:     logger,
+		Secrets: secretService,
+	}
+}
 
 // CreateSubscription Generates  a new subscription on an event type
-func CreateSubscription(payload string) *http.Response {
+func (s *Subscription) CreateSubscription(payload string) *http.Response {
 	// subscribe to eventsub
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return nil
 	}
 	// Add key headers to request
-	headers := utils.BuildSecretHeaders()
+	headers := s.Secrets.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	logger.Info("Sending request")
+	s.Log.Info("Sending request")
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error sending request:", "caused by", err)
+		s.Log.Error("Error sending request:", "caused by", err)
 		return nil
 	}
 	defer resp.Body.Close()
-	logger.Info("Subscription response:", "info", resp.StatusCode)
+	s.Log.Info("Subscription response:", "info", resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	logger.Info("Subscription", "message", string(body))
+	s.Log.Info("Subscription", "message", string(body))
 	return resp
 }
 
 // GetSubscriptions Retrieves all subscriptions for the application
-func GetSubscriptions() types.ValidateSubscription {
-	req, err := http.NewRequest("GET", url, nil)
-	headers := utils.BuildSecretHeaders()
+func (s *Subscription) GetSubscriptions() ValidateSubscription {
+	req, _ := http.NewRequest("GET", url, nil)
+	headers := s.Secrets.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Error("Error sending request:", "caused by", err)
+		s.Log.Error("Error sending request:", "caused by", err)
 	}
-	body, err := io.ReadAll(resp.Body)
-	var subscriptionList types.ValidateSubscription
+	body, _ := io.ReadAll(resp.Body)
+	var subscriptionList ValidateSubscription
 	json.Unmarshal(body, &subscriptionList)
 	return subscriptionList
 }
 
 // CleanSubscriptions Removes all existing subscriptions
-func CleanSubscriptions(subs types.ValidateSubscription) {
+func (s *Subscription) CleanSubscriptions(subs ValidateSubscription) {
 	if subs.Total > 0 {
 		for _, sub := range subs.Data {
 			deleteURL := fmt.Sprintf("%v?id=%v", url, sub.ID)
@@ -71,35 +92,35 @@ func CleanSubscriptions(subs types.ValidateSubscription) {
 			if err != nil {
 				return
 			}
-			headers := utils.BuildSecretHeaders()
+			headers := s.Secrets.BuildSecretHeaders()
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
 			client := &http.Client{}
-			resp, err := client.Do(req)
+			resp, _ := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
-				logger.Info("Subscription deleted:" + sub.ID)
+				s.Log.Info("Subscription deleted:" + sub.ID)
 			}
 		}
 	} else {
-		logger.Info("No subscriptions to delete")
+		s.Log.Info("No subscriptions to delete")
 	}
 }
 
-// func eleteSubscription deletes a subscription with an ID
-func DeleteSubscription(id int) {
+// func DeleteSubscription deletes a subscription with an ID
+func (s *Subscription) DeleteSubscription(id int) {
 	deleteURL := fmt.Sprintf("%v?id=%v", url, id)
 	req, err := http.NewRequest("DELETE", deleteURL, nil)
 	if err != nil {
 		return
 	}
-	headers := utils.BuildSecretHeaders()
+	headers := s.Secrets.BuildSecretHeaders()
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, _ := client.Do(req)
 	if resp.StatusCode == http.StatusNoContent {
-		logger.Info("Subscription deleted:", id)
+		s.Log.Info("Subscription deleted", "name:", id)
 	}
 }
