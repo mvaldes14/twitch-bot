@@ -3,9 +3,9 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -14,10 +14,21 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+)
+
+const (
+	adminToken = "ADMIN_TOKEN"
+)
+
+var (
+	errorTokenNotFound       = errors.New("Token not found for API protected routes")
+	errorTokenNotValid       = errors.New("Token not valid for API protected routes")
+	errorInvalidSbuscription = errors.New("Could not generate a valid subscription")
 )
 
 // RequestJSON represents a JSON HTTP request
-type RequestJson struct {
+type RequestJSON struct {
 	Method  string
 	URL     string
 	Payload string
@@ -26,36 +37,46 @@ type RequestJson struct {
 
 // Router is the struct that handles all routes
 type Router struct {
-	Log     *slog.Logger
 	Subs    *subscriptions.Subscription
 	Secrets *secrets.SecretService
 	Actions *actions.Actions
 	Spotify *spotify.Spotify
+	Log     *telemetry.CustomLogger
+	Discord *discord.Discord
 }
 
 // NewRouter creates a new router
-func NewRouter(logger *slog.Logger, subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
-	actions := actions.NewActions(logger, secretService)
-	spotify := spotify.NewSpotify(logger)
+func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
+	actions := actions.NewActions(secretService)
+	spotify := spotify.NewSpotify()
+	discord := discord.NewDiscord()
+	logger := telemetry.NewLogger("router")
 	return &Router{
 		Log:     logger,
 		Subs:    subs,
 		Secrets: secretService,
 		Actions: actions,
 		Spotify: spotify,
+		Discord: discord,
 	}
 }
 
 // CheckAuthAdmin validates for headers for admin routes
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := os.Getenv("ADMIN_TOKEN")
+		telemetry.APICallCount.Inc()
+		rt.Log.Info("Checking for admin token")
+		token := os.Getenv(adminToken)
 		if token == "" {
+			rt.Log.Error("Admin Token missing", errorTokenNotFound)
 			w.WriteHeader(http.StatusUnauthorized)
+			return
 		}
 		if r.Header.Get("Token") == token {
+			rt.Log.Info("Token is valid")
 			next.ServeHTTP(w, r)
 		} else {
+			rt.Log.Error("Admin Token is invalid", errorTokenNotValid)
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
@@ -85,12 +106,15 @@ func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(body, &challengeResponse)
 	w.Header().Add("Content-Type", "plain/text")
 	w.Write([]byte(challengeResponse.Challenge))
-	rt.Log.Info("Response sent")
+	rt.Log.Info("Response sent to challenge")
 }
 
 // DeleteHandler deletes all subscriptions
 func (rt *Router) DeleteHandler(_ http.ResponseWriter, _ *http.Request) {
-	subsList := rt.Subs.GetSubscriptions()
+	subsList, err := rt.Subs.GetSubscriptions()
+	if err != nil {
+		rt.Log.Error("Could not get subscriptions", err)
+	}
 	rt.Subs.CleanSubscriptions(subsList)
 }
 
@@ -101,7 +125,10 @@ func (rt *Router) HealthHandler(w http.ResponseWriter, _ *http.Request) {
 
 // ListHandler returns the current subscription list
 func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
-	subsList := rt.Subs.GetSubscriptions()
+	subsList, err := rt.Subs.GetSubscriptions()
+	if err != nil {
+		rt.Log.Error("Could not get subscriptions", err)
+	}
 	rt.Log.Info("Current Subscription List")
 	for _, sub := range subsList.Data {
 		rt.Log.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
@@ -149,9 +176,9 @@ func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
 	if subTypeConfig, ok := subscriptionTypes[subType]; ok {
 		payload := rt.GeneratePayload(subTypeConfig)
 		rt.Subs.CreateSubscription(payload)
-		rt.Log.Info("Subscription created", "type", subType)
+		rt.Log.Info("Subscription created: " + subType)
 	} else {
-		rt.Log.Error("Invalid subscription", "type", subType)
+		rt.Log.Error("Invalid subscription", errorInvalidSbuscription)
 	}
 }
 
@@ -170,6 +197,7 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 
 // FollowHandler responds to follow events
 func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.FollowCount.Inc()
 	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -178,7 +206,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &followEventResponse)
 	// Send to chat
-	// commands.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
+	rt.Actions.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
 }
 
 // SubHandler responds to subscription events
@@ -191,7 +219,8 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &subEventResponse)
 	// send to chat
-	// commands.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
+	telemetry.SubscriptionCount.Inc()
+	rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
 }
 
 // CheerHandler responds to cheer events
@@ -204,7 +233,8 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &cheerEventResponse)
 	// send to chat
-	// commands.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
+	telemetry.CheerCount.Inc()
+	rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
 }
 
 // RewardHandler responds to reward events
@@ -216,6 +246,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
+	telemetry.RewardCount.Inc()
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
 		token := rt.Spotify.RefreshToken()
 		rt.Spotify.NextSong(token)
@@ -239,21 +270,21 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // StreamHandler sends a message to discord
 func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
-	err := discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
+	err := rt.Discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
-		rt.Log.Error("Error", "sending message to discord", err)
+		rt.Log.Error("Sending message to discord", err)
 	}
 	req, err := http.NewRequest("POST", "https://automate.mvaldes.dev/webhook/stream-live", nil)
 	if err != nil {
-		rt.Log.Error("Error", "could not generate request for x post", err)
+		rt.Log.Error("Could not generate request for X post", err)
 	}
-	req.Header.Add("Token", os.Getenv("ADMIN_TOKEN"))
+	req.Header.Add("Token", os.Getenv(adminToken))
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		rt.Log.Error("Error", "Could not send request to webhook for X post", err)
+		rt.Log.Error("Could not send request to webhook for X post", err)
 	}
 	if resp.StatusCode == 200 {
-		rt.Log.Info("Info", "posting tweet to X", " ")
+		rt.Log.Info("Posting message to X")
 	}
 }

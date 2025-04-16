@@ -4,14 +4,16 @@ package actions
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
 const (
@@ -23,15 +25,16 @@ const (
 
 // Actions handles all Twitch chat actions and commands
 type Actions struct {
-	Logger  *slog.Logger
+	Log     *telemetry.CustomLogger
 	Secrets *secrets.SecretService
 	Spotify *spotify.Spotify
 }
 
 // NewActions creates a new Actions instance
-func NewActions(logger *slog.Logger, secrets *secrets.SecretService) *Actions {
+func NewActions(secrets *secrets.SecretService) *Actions {
+	logger := telemetry.NewLogger("actions")
 	return &Actions{
-		Logger:  logger,
+		Log:     logger,
 		Secrets: secrets,
 	}
 }
@@ -59,11 +62,12 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!song":
 		song := a.Spotify.GetSong(a.Spotify.RefreshToken())
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
+		a.Log.Info(msg)
 		a.SendMessage(msg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
-		a.Logger.Info("Today command")
+		a.Log.Info("Today command running")
 		a.updateChannel(msg)
 	}
 }
@@ -78,15 +82,20 @@ func (a *Actions) SendMessage(text string) error {
 
 	payload, err := json.Marshal(message)
 	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
+		a.Log.Error("Failed to marshal message:", err)
+		return err
 	}
 
 	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		a.Log.Error("Failed to create request", err)
+		return err
 	}
 
-	headers := a.Secrets.BuildSecretHeaders()
+	headers, err := a.Secrets.BuildSecretHeaders()
+	if err != nil {
+		a.Log.Error("Failed to build headers to send message", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -94,19 +103,21 @@ func (a *Actions) SendMessage(text string) error {
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send message: %w", err)
+		a.Log.Error("failed to send message: %w", err)
+		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		a.Log.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
+		return err
 	}
 
 	return nil
 }
 
 func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
-	a.Logger.Info("Changing the channel information")
+	a.Log.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
 	if action.Event.BroadcasterUserID == userID {
 		// Build the new payload
@@ -118,16 +129,19 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
       "broadcaster_language":"es"}`,
 			softwareID, msg)
-		a.Logger.Info("Today Command Payload", slog.String("Payload", payload))
+		a.Log.Info("Today Command Ran")
 
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
-			a.Logger.Error("Could not form request to update channel info")
+			a.Log.Error("Could not form request to update channel info", err)
 			return
 		}
 
-		headers := a.Secrets.BuildSecretHeaders()
+		headers, err := a.Secrets.BuildSecretHeaders()
+		if err != nil {
+			a.Log.Error("Failed to build headers to update channel", err)
+		}
 		userToken := a.Secrets.GetUserToken()
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
@@ -137,11 +151,11 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			client := &http.Client{}
 			res, err := client.Do(req)
 			if err != nil {
-				a.Logger.Error("Request could not be sent to update channel")
+				a.Log.Error("Request could not be sent to update channel", err)
 				return
 			}
 			if res.StatusCode != http.StatusBadRequest {
-				a.Logger.Error("Could not update channel", slog.Int("error", res.StatusCode))
+				a.Log.Error("Received a bad message while", errors.New("updating channel info"))
 				// Attempt to refresh the token
 				token := a.Secrets.GenerateNewToken()
 				a.Secrets.StoreNewTokens(token)

@@ -2,19 +2,19 @@
 package server
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/routes"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // NewServer creates the http server
-func NewServer(logger *slog.Logger, port string) *http.Server {
-	secretService := secrets.NewSecretService(logger)
-	subs := subscriptions.NewSubscription(logger, secretService)
-	rs := routes.NewRouter(logger, subs, secretService)
+func NewServer(port string) *http.Server {
+	secretService := secrets.NewSecretService()
+	subs := subscriptions.NewSubscription(secretService)
+	rs := routes.NewRouter(subs, secretService)
 	api := http.NewServeMux()
 	api.HandleFunc("/create", rs.CreateHandler)
 	api.HandleFunc("/delete", rs.DeleteHandler)
@@ -29,7 +29,7 @@ func NewServer(logger *slog.Logger, port string) *http.Server {
 	router.HandleFunc("/reward", rs.RewardHandler)
 	router.HandleFunc("/stream", rs.StreamHandler)
 	router.HandleFunc("/health", rs.HealthHandler)
-	logger.Info("Running and listening")
+	router.Handle("/metrics", promhttp.Handler())
 
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
 
