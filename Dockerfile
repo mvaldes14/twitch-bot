@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine
+FROM golang:1.22-alpine
 
 # Install Doppler CLI
 RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
