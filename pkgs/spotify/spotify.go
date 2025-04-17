@@ -31,6 +31,10 @@ const (
 	spotifyClientSecret = "SPOTIFY_CLIENT_SECRET"
 )
 
+var (
+	errSpotifyMissingToken = errors.New("Missing credentials")
+)
+
 // Spotify struct for spotify
 type Spotify struct {
 	Log *telemetry.CustomLogger
@@ -51,7 +55,7 @@ func (s *Spotify) RefreshToken() string {
 	clientID := os.Getenv(spotifyClientID)
 	clientSecret := os.Getenv(spotifyClientSecret)
 	if refreshToken == "" || clientID == "" || clientSecret == "" {
-		s.Log.Error("Missing spotify credentials in environment variables", errors.New("Missing credentials"))
+		s.Log.Error("Missing spotify credentials in environment variables", errSpotifyMissingToken)
 	}
 	token := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
 	params := url.Values{}

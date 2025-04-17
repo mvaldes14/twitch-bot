@@ -23,6 +23,10 @@ const (
 	softwareID       = 1469308723
 )
 
+var (
+	errUpdateChannel = errors.New("updating channel info")
+)
+
 // Actions handles all Twitch chat actions and commands
 type Actions struct {
 	Log     *telemetry.CustomLogger
@@ -155,7 +159,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 				return
 			}
 			if res.StatusCode != http.StatusBadRequest {
-				a.Log.Error("Received a bad message while", errors.New("updating channel info"))
+				a.Log.Error("Received a bad messag ", errUpdateChannel)
 				// Attempt to refresh the token
 				token := a.Secrets.GenerateNewToken()
 				a.Secrets.StoreNewTokens(token)

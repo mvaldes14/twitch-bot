@@ -110,12 +110,17 @@ func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteHandler deletes all subscriptions
-func (rt *Router) DeleteHandler(_ http.ResponseWriter, _ *http.Request) {
+func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList, err := rt.Subs.GetSubscriptions()
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
 	}
-	rt.Subs.CleanSubscriptions(subsList)
+	err = rt.Subs.DeleteSubscriptions(subsList)
+	if err != nil {
+		rt.Log.Error("Could not delete subscriptions", err)
+	}
+	rt.Log.Info("Deleted all subscriptions")
+	w.WriteHeader(http.StatusOK)
 }
 
 // HealthHandler returns a healthy message

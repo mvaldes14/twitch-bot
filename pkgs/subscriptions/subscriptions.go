@@ -4,6 +4,7 @@ package subscriptions
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,12 @@ import (
 const (
 	// URL endpoint for all twitch subscriptions
 	URL = "https://api.twitch.tv/helix/eventsub/subscriptions"
+)
+
+var (
+	errFailedSubscriptionCreation = errors.New("Failed to create new subscription")
+	errFailedSubscriptionDeletion = errors.New("Failed to delete subscription")
+	errFailedToFormRequest        = errors.New("Failed to form request")
 )
 
 // Subscription is the struct that handles all subscriptions
@@ -33,7 +40,7 @@ func NewSubscription(secretService *secrets.SecretService) *Subscription {
 }
 
 // CreateSubscription Generates  a new subscription on an event type
-func (s *Subscription) CreateSubscription(payload string) *http.Response {
+func (s *Subscription) CreateSubscription(payload string) error {
 	// subscribe to eventsub
 	req, err := http.NewRequest("POST", URL, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
@@ -42,7 +49,7 @@ func (s *Subscription) CreateSubscription(payload string) *http.Response {
 	// Add key headers to request
 	headers, err := s.Secrets.BuildSecretHeaders()
 	if err != nil {
-		s.Log.Error("Error building secret headers:", err)
+		s.Log.Error("Error getting headers for CreateSubscription", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -50,17 +57,15 @@ func (s *Subscription) CreateSubscription(payload string) *http.Response {
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	s.Log.Info("Creating request for subscription")
+	s.Log.Info("Sending request for subscription for:" + payload)
 	resp, err := client.Do(req)
 	if err != nil {
-		s.Log.Error("Error sending request:", err)
+		s.Log.Error("Error sending request for new subscription", err)
 		return nil
 	}
 	defer resp.Body.Close()
-	s.Log.Info("Subscription created")
-	body, _ := io.ReadAll(resp.Body)
-	s.Log.Info(string(body))
-	return resp
+	s.Log.Info("Subscription created for: " + payload)
+	return errFailedSubscriptionCreation
 }
 
 // GetSubscriptions Retrieves all subscriptions for the application
@@ -68,7 +73,7 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	req, _ := http.NewRequest("GET", URL, nil)
 	headers, err := s.Secrets.BuildSecretHeaders()
 	if err != nil {
-		s.Log.Error("Error building secret headers:", err)
+		s.Log.Error("Error getting headers for GetSubscriptions", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -85,51 +90,32 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	return subscriptionList, nil
 }
 
-// CleanSubscriptions Removes all existing subscriptions
-func (s *Subscription) CleanSubscriptions(subs ValidateSubscription) {
+// DeleteSubscriptions Removes all existing subscriptions
+func (s *Subscription) DeleteSubscriptions(subs ValidateSubscription) error {
 	if subs.Total > 0 {
 		for _, sub := range subs.Data {
 			deleteURL := fmt.Sprintf("%v?id=%v", URL, sub.ID)
 			req, err := http.NewRequest("DELETE", deleteURL, nil)
 			if err != nil {
-				return
+				return errFailedToFormRequest
 			}
 			headers, err := s.Secrets.BuildSecretHeaders()
 			if err != nil {
-				s.Log.Error("Error building secret headers:", err)
+				s.Log.Error("Error getting headers for DeleteSubscriptions", err)
 			}
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
+			s.Log.Info("Deleting subscription:" + sub.ID)
 			client := &http.Client{}
 			resp, _ := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
 				s.Log.Info("Subscription deleted:" + sub.ID)
 			}
+			return errFailedSubscriptionDeletion
 		}
 	} else {
 		s.Log.Info("No subscriptions to delete")
 	}
-}
-
-// DeleteSubscription deletes a subscription with an ID
-func (s *Subscription) DeleteSubscription(id int) {
-	deleteURL := fmt.Sprintf("%v?id=%v", URL, id)
-	req, err := http.NewRequest("DELETE", deleteURL, nil)
-	if err != nil {
-		return
-	}
-	headers, err := s.Secrets.BuildSecretHeaders()
-	if err != nil {
-		s.Log.Error("Error building secret headers:", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+headers.Token)
-	req.Header.Set("Client-Id", headers.ClientID)
-	client := &http.Client{}
-	resp, _ := client.Do(req)
-	if resp.StatusCode == http.StatusNoContent {
-		s.Log.Info("Request to delete subscription was successful")
-	}
+	return nil
 }
