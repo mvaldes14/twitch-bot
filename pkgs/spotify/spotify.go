@@ -13,10 +13,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
-
-var currentToken string
 
 const (
 	tokenURL            = "https://accounts.spotify.com/api/token"
@@ -32,55 +31,64 @@ const (
 )
 
 var (
-	errSpotifyMissingToken = errors.New("Missing credentials")
+	errSpotifyMissingToken = errors.New("Missing credentials from environment")
+	errSpotifyNoToken      = errors.New("Failed to produce a new token")
 )
 
 // Spotify struct for spotify
 type Spotify struct {
-	Log *telemetry.CustomLogger
+	Log     *telemetry.CustomLogger
+	Secrets *secrets.SecretService
 }
 
 // NewSpotify creates a new spotify instance
 func NewSpotify() *Spotify {
 	logger := telemetry.NewLogger("spotify")
+	secrets := secrets.NewSecretService()
 	return &Spotify{
-		Log: logger,
+		Log:     logger,
+		Secrets: secrets,
 	}
 }
 
-// RefreshToken generates a new token for the spotify api
-func (s *Spotify) RefreshToken() string {
-	s.Log.Info("Refreshing token")
+// GetSpotifyToken generates a new token for the spotify api
+func (s *Spotify) GetSpotifyToken() (string, error) {
 	refreshToken := os.Getenv(spotifyRefreshToken)
 	clientID := os.Getenv(spotifyClientID)
 	clientSecret := os.Getenv(spotifyClientSecret)
 	if refreshToken == "" || clientID == "" || clientSecret == "" {
-		s.Log.Error("Missing spotify credentials in environment variables", errSpotifyMissingToken)
+		s.Log.Error("Missing Spotify credentials in doppler", errSpotifyMissingToken)
+		return "", errSpotifyMissingToken
 	}
-	token := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
+	encodedAuthorizationCode := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
 	params := url.Values{}
 	params.Set("grant_type", "refresh_token")
 	params.Set("refresh_token", refreshToken)
 
 	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		s.Log.Error("Error Generating Request for token refresh", err)
+		s.Log.Error("Error forming request for GetSpotifyToken", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Basic "+token)
+	req.Header.Set("Authorization", "Basic "+encodedAuthorizationCode)
 	client := &http.Client{}
+	s.Log.Info("Requesting New Spotify token")
 	res, err := client.Do(req)
 	if err != nil {
-		s.Log.Error("Error Sending Request for token refresh", err)
+		s.Log.Error("Error sending request to get new token", err)
 	}
-	resBody, err := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error("Error from token refresh request", err)
+		s.Log.Error("Error received from Spotify API", err)
 	}
 	var t SpotifyTokenResponse
-	json.Unmarshal(resBody, &t)
-	currentToken = t.AccessToken
-	return t.AccessToken
+	json.Unmarshal(body, &t)
+	err = s.Secrets.StoreNewTokens(t.RefreshToken)
+	if err != nil {
+		s.Log.Error("Error storing new token in Doppler", err)
+		return "", err
+	}
+	return t.AccessToken, nil
 }
 
 // NextSong Changes the currently playing song
@@ -102,7 +110,7 @@ func (s *Spotify) NextSong(token string) {
 	// Token is invalid
 	if res.StatusCode == http.StatusUnauthorized {
 		s.Log.Info("Unauthorized")
-		token := s.RefreshToken()
+		token := s.GetSpotifyToken()
 		s.NextSong(token)
 	}
 }
@@ -126,7 +134,7 @@ func (s *Spotify) GetSong(token string) SpotifyCurrentlyPlaying {
 	// Token is invalid
 	if res.StatusCode == http.StatusUnauthorized {
 		s.Log.Info("Unauthorized")
-		token := s.RefreshToken()
+		token := s.GetSpotifyToken()
 		s.GetSong(token)
 	}
 	body, err := io.ReadAll(res.Body)

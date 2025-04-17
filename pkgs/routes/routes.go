@@ -253,24 +253,24 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(body, &rewardEventResponse)
 	telemetry.RewardCount.Inc()
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
-		token := rt.Spotify.RefreshToken()
+		token := rt.Spotify.GetSpotifyToken()
 		rt.Spotify.NextSong(token)
 	}
 	if rewardEventResponse.Event.Reward.Title == "Add Song" {
 		spotifyURL := rewardEventResponse.Event.UserInput
-		token := rt.Spotify.RefreshToken()
+		token := rt.Spotify.GetSpotifyToken()
 		rt.Spotify.AddToPlaylist(token, spotifyURL)
 	}
 	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-		token := rt.Spotify.RefreshToken()
+		token := rt.Spotify.GetSpotifyToken()
 		rt.Spotify.DeleteSongPlaylist(token)
 	}
 }
 
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
-	test := rt.Secrets.GenerateNewToken()
-	rt.Secrets.StoreNewTokens(test)
+	rt.Log.Info("Testing")
+	rt.Actions.SendMessage("Test")
 }
 
 // StreamHandler sends a message to discord

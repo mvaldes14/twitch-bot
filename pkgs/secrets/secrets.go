@@ -28,6 +28,10 @@ const (
 	dopplerAPIURL  = "https://api.doppler.com/v3/configs/config/secrets"
 )
 
+var (
+	errDopplerSaveSecret = errors.New("Failed to store secret in Doppler")
+)
+
 // SecretService implements SecretManager interface
 type SecretService struct {
 	Log *telemetry.CustomLogger
@@ -106,30 +110,44 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 }
 
 // StoreNewTokens stores new tokens in Doppler
-func (s *SecretService) StoreNewTokens(tokens TwitchRefreshResponse) bool {
+func (s *SecretService) StoreNewTokens(value string) error {
 	dopplerToken := os.Getenv(dopplerToken)
 	headers := map[string]string{
 		"Accept":        "application/json",
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer " + dopplerToken,
 	}
-
-	payload := fmt.Sprintf(`{
+	var payload string
+	// switch service {
+	// // TODO: Don't remember what this refresh was for
+	// case "twitch":
+	// 	payload = fmt.Sprintf(`{
+	// 	"project": "%v",
+	// 	"config": "%v",
+	//    "secrets": {"TWITCH_USER_TOKEN": "%v", "TWITCH_REFRESH_TOKEN": "%v"}
+	// }`, projectName, configName, value)
+	// case "spotify":
+	payload = fmt.Sprintf(`{
 		"project": "%v",
 		"config": "%v",
-    "secrets": {"TWITCH_USER_TOKEN": "%v", "TWITCH_REFRESH_TOKEN": "%v"}
-	}`, projectName, configName, tokens.AccessToken, tokens.RefreshToken)
+    "secrets": {"SPOTIFY_REFRESH_TOKEN": "%v"}
+	}`, projectName, configName, value)
+	// }
+
 	req := RequestJson{
 		Method:  "POST",
 		URL:     dopplerAPIURL,
 		Payload: payload,
 		Headers: headers,
 	}
-	s.Log.Info("Storing new tokens in doppler")
+	s.Log.Info("Storing new tokens in Doppler")
 	var response DopplerSecretUpdate
 	if err := s.MakeRequestMarshallJSON(&req, &response); err != nil {
 		s.Log.Error("Failed to send request", err)
-		return false
+		return errDopplerSaveSecret
 	}
-	return response.Success
+	if !response.Success {
+		return errDopplerSaveSecret
+	}
+	return nil
 }

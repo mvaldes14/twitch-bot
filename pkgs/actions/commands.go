@@ -64,7 +64,7 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!youtube":
 		a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
-		song := a.Spotify.GetSong(a.Spotify.RefreshToken())
+		song := a.Spotify.GetSong(a.Spotify.GetSpotifyToken())
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
 		a.Log.Info(msg)
 		a.SendMessage(msg)

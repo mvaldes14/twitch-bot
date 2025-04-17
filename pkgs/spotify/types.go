@@ -4,9 +4,10 @@ import "time"
 
 // SpotifyTokenResponse represents the response from Spotify token endpoint
 type SpotifyTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	Scope       string `json:"scope"`
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	Scope        string `json:"scope"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 // SpotifyCurrentlyPlaying represents the currently playing track from Spotify
@@ -86,8 +87,8 @@ type SpotifyCurrentlyPlaying struct {
 			} `json:"images"`
 			Name       string `json:"name"`
 			Popularity int    `json:"popularity"`
-			Type      string `json:"type"`
-			URI       string `json:"uri"`
+			Type       string `json:"type"`
+			URI        string `json:"uri"`
 		} `json:"artists"`
 		AvailableMarkets []string `json:"available_markets"`
 		DiscNumber       int      `json:"disc_number"`
@@ -332,8 +333,8 @@ type SpotifyPlaylistItemList struct {
 				} `json:"images"`
 				Name       string `json:"name"`
 				Popularity int    `json:"popularity"`
-				Type      string `json:"type"`
-				URI       string `json:"uri"`
+				Type       string `json:"type"`
+				URI        string `json:"uri"`
 			} `json:"artists"`
 			AvailableMarkets []string `json:"available_markets"`
 			DiscNumber       int      `json:"disc_number"`
