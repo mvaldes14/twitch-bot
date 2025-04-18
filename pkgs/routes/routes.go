@@ -298,8 +298,9 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 func (rt *Router) PlayingHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Serving song")
 	token, _ := rt.Spotify.GetSpotifyToken()
-	if token != "" {
-		rt.Log.Info("New token is" + token)
+	if token.Token != "" {
+		// TODO: return the html page with the song
+
 	}
 
 }
