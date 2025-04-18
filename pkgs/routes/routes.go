@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"text/template"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
@@ -25,6 +26,7 @@ var (
 	errorTokenNotFound       = errors.New("Token not found for API protected routes")
 	errorTokenNotValid       = errors.New("Token not valid for API protected routes")
 	errorInvalidSbuscription = errors.New("Could not generate a valid subscription")
+	errorNoMusicPlaying      = errors.New("Nothing is playing on spotify")
 )
 
 // RequestJSON represents a JSON HTTP request
@@ -33,6 +35,12 @@ type RequestJSON struct {
 	URL     string
 	Payload string
 	Headers map[string]string
+}
+
+type SongData struct {
+	Title    string
+	Artist   string
+	AlbumArt string
 }
 
 // Router is the struct that handles all routes
@@ -295,12 +303,31 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // PlayingHandler displays music playing in spotify
-func (rt *Router) PlayingHandler(_ http.ResponseWriter, _ *http.Request) {
+func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Serving song")
 	token, _ := rt.Spotify.GetSpotifyToken()
 	if token.Token != "" {
-		// TODO: return the html page with the song
-
+		song := rt.Spotify.GetSong(token)
+		if !song.Device.IsActive {
+			rt.Log.Error("No Music", errorNoMusicPlaying)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		data := SongData{
+			Title:    song.Item.Name,
+			Artist:   song.Item.Artists[0].Name,
+			AlbumArt: song.Item.Album.Images[0].URL,
+		}
+		tmpl, err := template.ParseFiles("./templates/index.html")
+		if err != nil {
+			rt.Log.Error("Error parsing template", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		err = tmpl.Execute(w, data)
+		if err != nil {
+			http.Error(w, "Error executing template", http.StatusInternalServerError)
+			return
+		}
 	}
-
 }

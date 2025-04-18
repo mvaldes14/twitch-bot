@@ -131,7 +131,7 @@ func (s *SecretService) StoreNewTokens(value string) error {
 	payload = fmt.Sprintf(`{
 		"project": "%v",
 		"config": "%v",
-    "secrets": {"SPOTIFY_REFRESH_TOKEN": "%v"}
+    "secrets": {"SPOTIFY_TOKEN": "%v"}
 	}`, projectName, configName, value)
 
 	req := RequestJson{

@@ -111,22 +111,17 @@ func (s *Spotify) GetSpotifyToken() (Token, error) {
 	}
 	token.Token = t.AccessToken
 	token.Timestamp = time.Now()
-	s.Log.Info("New token generated", token)
-	err = s.Secrets.StoreNewTokens(token.Token)
-	if err != nil {
-		s.Log.Error("Error storing new token in Doppler", err)
-		return token, err
-	}
+	s.Log.Info("New token generated")
 	return token, nil
 }
 
 // NextSong Changes the currently playing song
-func (s *Spotify) NextSong(token string) {
+func (s *Spotify) NextSong(token Token) {
 	req, err := http.NewRequest("POST", nextURL, nil)
 	if err != nil {
 		s.Log.Error("Error Generating Request for next song", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+token.Token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
@@ -145,12 +140,12 @@ func (s *Spotify) NextSong(token string) {
 }
 
 // GetSong returns the current song playing via chat
-func (s *Spotify) GetSong(token string) SpotifyCurrentlyPlaying {
+func (s *Spotify) GetSong(token Token) SpotifyCurrentlyPlaying {
 	req, err := http.NewRequest("GET", currentURL, nil)
 	if err != nil {
 		s.Log.Error("Error Generating Request for get song", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+token.Token)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {

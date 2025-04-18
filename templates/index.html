@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <meta http-equiv="refresh" content="30"> </head>
+    <style>
+        body {
+            background-color: transparent; /* Transparent background for the page */
+            color: #e0e0e0; /* Light text color (will be mostly for potential fallback or if other elements are added) */
+            font-family: sans-serif;
+            margin: 0;
+            position: fixed; /* Cover the entire viewport to allow overlay positioning */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allow interaction with elements behind the overlay */
+            display: flex;
+            justify-content: flex-start; /* Align to the start (left) */
+            align-items: flex-start; /* Align to the start (top) */
+            padding: 20px; /* Add some padding from the edges */
+            box-sizing: border-box; /* Include padding in width and height */
+        }
+
+        .song-container {
+            width: 250px;
+            height: 100px;
+            border: 1px solid #333;
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            box-sizing: border-box;
+            background-color: #1e1e1e;
+            color: #e0e0e0; /* Light text color for the card content */
+            border-radius: 10px;
+            z-index: 1000; /* Ensure it's on top */
+            pointer-events: auto; /* Make the card interactable */
+        }
+
+        .album-art {
+            width: 80px;
+            height: 80px;
+            margin-right: 10px;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+
+        .song-details {
+            flex-grow: 1;
+        }
+
+        .song-title {
+            font-size: 1.0em;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .song-artist {
+            font-size: 1.0em;
+            color: #bbb;
+        }
+    </style>
+</head>
+<body>
+    <div class="song-container">
+        <img src="{{ .AlbumArt }}" alt="Album Art" class="album-art">
+        <div class="song-details">
+            <div class="song-title">{{ .Title }}</div>
+            <div class="song-artist">By {{ .Artist }}</div>
+        </div>
+    </div>
+</body>
+</html>
