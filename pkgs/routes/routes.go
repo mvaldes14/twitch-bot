@@ -252,19 +252,19 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
 	telemetry.RewardCount.Inc()
-	if rewardEventResponse.Event.Reward.Title == "Next Song" {
-		token := rt.Spotify.GetSpotifyToken()
-		rt.Spotify.NextSong(token)
-	}
-	if rewardEventResponse.Event.Reward.Title == "Add Song" {
-		spotifyURL := rewardEventResponse.Event.UserInput
-		token := rt.Spotify.GetSpotifyToken()
-		rt.Spotify.AddToPlaylist(token, spotifyURL)
-	}
-	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-		token := rt.Spotify.GetSpotifyToken()
-		rt.Spotify.DeleteSongPlaylist(token)
-	}
+	// if rewardEventResponse.Event.Reward.Title == "Next Song" {
+	// 	// token := rt.Spotify.GetSpotifyToken()
+	// 	// rt.Spotify.NextSong(token)
+	// }
+	// if rewardEventResponse.Event.Reward.Title == "Add Song" {
+	// 	spotifyURL := rewardEventResponse.Event.UserInput
+	// 	// token := rt.Spotify.GetSpotifyToken()
+	// 	// rt.Spotify.AddToPlaylist(token, spotifyURL)
+	// }
+	// if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
+	// 	// token := rt.Spotify.GetSpotifyToken()
+	// 	rt.Spotify.DeleteSongPlaylist(token)
+	// }
 }
 
 // TestHandler is used to test if the bot is responding to messages
@@ -292,4 +292,14 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 	if resp.StatusCode == 200 {
 		rt.Log.Info("Posting message to X")
 	}
+}
+
+// PlayingHandler displays music playing in spotify
+func (rt *Router) PlayingHandler(_ http.ResponseWriter, _ *http.Request) {
+	rt.Log.Info("Serving song")
+	token, _ := rt.Spotify.GetSpotifyToken()
+	if token != "" {
+		rt.Log.Info("New token is" + token)
+	}
+
 }

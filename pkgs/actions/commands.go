@@ -64,10 +64,10 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!youtube":
 		a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
-		song := a.Spotify.GetSong(a.Spotify.GetSpotifyToken())
-		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
-		a.Log.Info(msg)
-		a.SendMessage(msg)
+		// song := a.Spotify.GetSong(a.Spotify.GetSpotifyToken())
+		// msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
+		// a.Log.Info(msg)
+		// a.SendMessage(msg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
@@ -161,8 +161,8 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			if res.StatusCode != http.StatusBadRequest {
 				a.Log.Error("Received a bad messag ", errUpdateChannel)
 				// Attempt to refresh the token
-				token := a.Secrets.GenerateNewToken()
-				a.Secrets.StoreNewTokens(token)
+				// token := a.Secrets.GenerateNewToken()
+				// a.Secrets.StoreNewTokens(token)
 			}
 			if res.StatusCode == http.StatusOK {
 				break

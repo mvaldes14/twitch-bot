@@ -1,4 +1,4 @@
-// package secrets handles all interactions with secrets
+// Package secrets handles all interactions with secrets
 package secrets
 
 import (
@@ -29,7 +29,9 @@ const (
 )
 
 var (
-	errDopplerSaveSecret = errors.New("Failed to store secret in Doppler")
+	errDopplerSaveSecret   = errors.New("Failed to store secret in Doppler")
+	errDopplerMissingToken = errors.New("Doppler token not found in environment")
+	errDopplerAPIErr       = errors.New("Error received from Doppler API")
 )
 
 // SecretService implements SecretManager interface
@@ -98,8 +100,12 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 	s.Log.Info("Sending request to doppler")
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		s.Log.Error("Error Sending request to doppler:", err)
+		s.Log.Error("Error Sending request to doppler", err)
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		s.Log.Error("Error received from Doppler API", errDopplerAPIErr)
+		return errDopplerAPIErr
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -112,27 +118,21 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 // StoreNewTokens stores new tokens in Doppler
 func (s *SecretService) StoreNewTokens(value string) error {
 	dopplerToken := os.Getenv(dopplerToken)
+	if dopplerToken == "" {
+		s.Log.Error("Doppler Token empty", errDopplerMissingToken)
+		return errDopplerMissingToken
+	}
 	headers := map[string]string{
 		"Accept":        "application/json",
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer " + dopplerToken,
 	}
 	var payload string
-	// switch service {
-	// // TODO: Don't remember what this refresh was for
-	// case "twitch":
-	// 	payload = fmt.Sprintf(`{
-	// 	"project": "%v",
-	// 	"config": "%v",
-	//    "secrets": {"TWITCH_USER_TOKEN": "%v", "TWITCH_REFRESH_TOKEN": "%v"}
-	// }`, projectName, configName, value)
-	// case "spotify":
 	payload = fmt.Sprintf(`{
 		"project": "%v",
 		"config": "%v",
     "secrets": {"SPOTIFY_REFRESH_TOKEN": "%v"}
 	}`, projectName, configName, value)
-	// }
 
 	req := RequestJson{
 		Method:  "POST",

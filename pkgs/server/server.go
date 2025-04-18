@@ -29,6 +29,7 @@ func NewServer(port string) *http.Server {
 	router.HandleFunc("/reward", rs.RewardHandler)
 	router.HandleFunc("/stream", rs.StreamHandler)
 	router.HandleFunc("/health", rs.HealthHandler)
+	router.HandleFunc("/playing", rs.PlayingHandler)
 	router.Handle("/metrics", promhttp.Handler())
 
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))

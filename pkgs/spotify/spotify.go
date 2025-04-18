@@ -57,7 +57,7 @@ func (s *Spotify) GetSpotifyToken() (string, error) {
 	clientID := os.Getenv(spotifyClientID)
 	clientSecret := os.Getenv(spotifyClientSecret)
 	if refreshToken == "" || clientID == "" || clientSecret == "" {
-		s.Log.Error("Missing Spotify credentials in doppler", errSpotifyMissingToken)
+		s.Log.Error("Missing Spotify credentials in Doppler", errSpotifyMissingToken)
 		return "", errSpotifyMissingToken
 	}
 	encodedAuthorizationCode := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
@@ -79,16 +79,22 @@ func (s *Spotify) GetSpotifyToken() (string, error) {
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error("Error received from Spotify API", err)
+		s.Log.Error("Error getting new token from Spotify API", err)
 	}
 	var t SpotifyTokenResponse
-	json.Unmarshal(body, &t)
-	err = s.Secrets.StoreNewTokens(t.RefreshToken)
+	err = json.Unmarshal(body, &t)
 	if err != nil {
-		s.Log.Error("Error storing new token in Doppler", err)
+		s.Log.Error("Error unmarshalling token response", err)
 		return "", err
 	}
-	return t.AccessToken, nil
+	s.Log.Info("got from spotify:", t)
+	// err = s.Secrets.StoreNewTokens(t.RefreshToken)
+	// if err != nil {
+	// 	s.Log.Error("Error storing new token in Doppler", err)
+	// 	return "", err
+	// }
+	// return t.AccessToken, nil
+	return "", nil
 }
 
 // NextSong Changes the currently playing song
@@ -110,8 +116,8 @@ func (s *Spotify) NextSong(token string) {
 	// Token is invalid
 	if res.StatusCode == http.StatusUnauthorized {
 		s.Log.Info("Unauthorized")
-		token := s.GetSpotifyToken()
-		s.NextSong(token)
+		// token := s.GetSpotifyToken()
+		// s.NextSong(token)
 	}
 }
 
@@ -134,8 +140,8 @@ func (s *Spotify) GetSong(token string) SpotifyCurrentlyPlaying {
 	// Token is invalid
 	if res.StatusCode == http.StatusUnauthorized {
 		s.Log.Info("Unauthorized")
-		token := s.GetSpotifyToken()
-		s.GetSong(token)
+		// token := s.GetSpotifyToken()
+		// s.GetSong(token)
 	}
 	body, err := io.ReadAll(res.Body)
 	var currentlyPlaying SpotifyCurrentlyPlaying
