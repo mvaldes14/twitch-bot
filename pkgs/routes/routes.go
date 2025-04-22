@@ -308,7 +308,7 @@ func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
 	token, _ := rt.Spotify.GetSpotifyToken()
 	if token.Token != "" {
 		song := rt.Spotify.GetSong(token)
-		if !song.Device.IsActive {
+		if !song.IsPlaying {
 			rt.Log.Error("No Music", errorNoMusicPlaying)
 			w.WriteHeader(http.StatusNotFound)
 			return
