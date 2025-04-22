@@ -260,25 +260,24 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
 	telemetry.RewardCount.Inc()
-	// if rewardEventResponse.Event.Reward.Title == "Next Song" {
-	// 	// token := rt.Spotify.GetSpotifyToken()
-	// 	// rt.Spotify.NextSong(token)
-	// }
-	// if rewardEventResponse.Event.Reward.Title == "Add Song" {
-	// 	spotifyURL := rewardEventResponse.Event.UserInput
-	// 	// token := rt.Spotify.GetSpotifyToken()
-	// 	// rt.Spotify.AddToPlaylist(token, spotifyURL)
-	// }
-	// if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-	// 	// token := rt.Spotify.GetSpotifyToken()
-	// 	rt.Spotify.DeleteSongPlaylist(token)
-	// }
+	if rewardEventResponse.Event.Reward.Title == "Next Song" {
+		rt.Spotify.NextSong()
+	}
+	if rewardEventResponse.Event.Reward.Title == "Add Song" {
+		rt.Log.Info("Adding song to playlist")
+		spotifyURL := rewardEventResponse.Event.UserInput
+		rt.Spotify.AddToPlaylist(spotifyURL)
+	}
+	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
+		rt.Spotify.DeleteSongPlaylist()
+	}
 }
 
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Testing")
-	rt.Actions.SendMessage("Test")
+	// rt.Actions.SendMessage("Test")
+	rt.Spotify.NextSong()
 }
 
 // StreamHandler sends a message to discord
@@ -304,10 +303,9 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // PlayingHandler displays music playing in spotify
 func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
-	rt.Log.Info("Serving song")
 	token, _ := rt.Spotify.GetSpotifyToken()
 	if token.Token != "" {
-		song := rt.Spotify.GetSong(token)
+		song := rt.Spotify.GetSong()
 		if !song.IsPlaying {
 			rt.Log.Error("No Music", errorNoMusicPlaying)
 			w.WriteHeader(http.StatusNotFound)
@@ -330,4 +328,11 @@ func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
 			return
 		}
 	}
+}
+
+// PlaylistHandler displays the playlist
+func (rt *Router) PlaylistHandler(w http.ResponseWriter, _ *http.Request) {
+	songs := rt.Spotify.GetSongsPlaylist()
+	w.WriteHeader(http.StatusOK)
+	rt.Log.Info(songs)
 }
