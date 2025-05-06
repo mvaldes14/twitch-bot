@@ -276,7 +276,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Testing")
-	// rt.Actions.SendMessage("Test")
+	rt.Actions.SendMessage("Test")
 	rt.Spotify.NextSong()
 }
 
