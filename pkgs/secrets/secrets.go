@@ -1,4 +1,4 @@
-// package secrets handles all interactions with secrets
+// Package secrets handles all interactions with secrets
 package secrets
 
 import (
@@ -26,6 +26,12 @@ const (
 	// API Endpoints
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
 	dopplerAPIURL  = "https://api.doppler.com/v3/configs/config/secrets"
+)
+
+var (
+	errDopplerSaveSecret   = errors.New("Failed to store secret in Doppler")
+	errDopplerMissingToken = errors.New("Doppler token not found in environment")
+	errDopplerAPIErr       = errors.New("Error received from Doppler API")
 )
 
 // SecretService implements SecretManager interface
@@ -94,8 +100,12 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 	s.Log.Info("Sending request to doppler")
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		s.Log.Error("Error Sending request to doppler:", err)
+		s.Log.Error("Error Sending request to doppler", err)
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		s.Log.Error("Error received from Doppler API", errDopplerAPIErr)
+		return errDopplerAPIErr
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -106,30 +116,38 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 }
 
 // StoreNewTokens stores new tokens in Doppler
-func (s *SecretService) StoreNewTokens(tokens TwitchRefreshResponse) bool {
+func (s *SecretService) StoreNewTokens(value string) error {
 	dopplerToken := os.Getenv(dopplerToken)
+	if dopplerToken == "" {
+		s.Log.Error("Doppler Token empty", errDopplerMissingToken)
+		return errDopplerMissingToken
+	}
 	headers := map[string]string{
 		"Accept":        "application/json",
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer " + dopplerToken,
 	}
-
-	payload := fmt.Sprintf(`{
+	var payload string
+	payload = fmt.Sprintf(`{
 		"project": "%v",
 		"config": "%v",
-    "secrets": {"TWITCH_USER_TOKEN": "%v", "TWITCH_REFRESH_TOKEN": "%v"}
-	}`, projectName, configName, tokens.AccessToken, tokens.RefreshToken)
+    "secrets": {"SPOTIFY_TOKEN": "%v"}
+	}`, projectName, configName, value)
+
 	req := RequestJson{
 		Method:  "POST",
 		URL:     dopplerAPIURL,
 		Payload: payload,
 		Headers: headers,
 	}
-	s.Log.Info("Storing new tokens in doppler")
+	s.Log.Info("Storing new tokens in Doppler")
 	var response DopplerSecretUpdate
 	if err := s.MakeRequestMarshallJSON(&req, &response); err != nil {
 		s.Log.Error("Failed to send request", err)
-		return false
+		return errDopplerSaveSecret
 	}
-	return response.Success
+	if !response.Success {
+		return errDopplerSaveSecret
+	}
+	return nil
 }

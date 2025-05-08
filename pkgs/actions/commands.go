@@ -23,6 +23,10 @@ const (
 	softwareID       = 1469308723
 )
 
+var (
+	errUpdateChannel = errors.New("updating channel info")
+)
+
 // Actions handles all Twitch chat actions and commands
 type Actions struct {
 	Log     *telemetry.CustomLogger
@@ -60,7 +64,7 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!youtube":
 		a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
-		song := a.Spotify.GetSong(a.Spotify.RefreshToken())
+		song := a.Spotify.GetSong()
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
 		a.Log.Info(msg)
 		a.SendMessage(msg)
@@ -155,10 +159,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 				return
 			}
 			if res.StatusCode != http.StatusBadRequest {
-				a.Log.Error("Received a bad message while", errors.New("updating channel info"))
-				// Attempt to refresh the token
-				token := a.Secrets.GenerateNewToken()
-				a.Secrets.StoreNewTokens(token)
+				a.Log.Error("Received a bad messag ", errUpdateChannel)
 			}
 			if res.StatusCode == http.StatusOK {
 				break

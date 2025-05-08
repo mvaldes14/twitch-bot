@@ -15,16 +15,20 @@ const (
 	discordWebhookURL = "DISCORD_WEBHOOK"
 )
 
+var (
+	errMessageDiscord = errors.New("Error sending message to discord")
+)
+
 // Discord struct to hold the logger
 type Discord struct {
-	Log *telemetry.CustomLogger
+	Log telemetry.CustomLogger
 }
 
 // NewDiscord create a new discord instance
 func NewDiscord() *Discord {
 	logger := *telemetry.NewLogger("discord")
 	return &Discord{
-		Log: &logger,
+		Log: logger,
 	}
 }
 
@@ -49,9 +53,8 @@ func (d *Discord) NotifyChannel(msg string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		err := errors.New("Error sending message to discord")
-		d.Log.Error("Error sending message to discord", err)
-		return err
+		d.Log.Error("Error sending message to discord", errMessageDiscord)
+		return errMessageDiscord
 	}
 	return nil
 }

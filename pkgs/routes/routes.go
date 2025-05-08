@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"text/template"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
@@ -25,6 +26,7 @@ var (
 	errorTokenNotFound       = errors.New("Token not found for API protected routes")
 	errorTokenNotValid       = errors.New("Token not valid for API protected routes")
 	errorInvalidSbuscription = errors.New("Could not generate a valid subscription")
+	errorNoMusicPlaying      = errors.New("Nothing is playing on spotify")
 )
 
 // RequestJSON represents a JSON HTTP request
@@ -33,6 +35,12 @@ type RequestJSON struct {
 	URL     string
 	Payload string
 	Headers map[string]string
+}
+
+type SongData struct {
+	Title    string
+	Artist   string
+	AlbumArt string
 }
 
 // Router is the struct that handles all routes
@@ -110,12 +118,17 @@ func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteHandler deletes all subscriptions
-func (rt *Router) DeleteHandler(_ http.ResponseWriter, _ *http.Request) {
+func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList, err := rt.Subs.GetSubscriptions()
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
 	}
-	rt.Subs.CleanSubscriptions(subsList)
+	err = rt.Subs.DeleteSubscriptions(subsList)
+	if err != nil {
+		rt.Log.Error("Could not delete subscriptions", err)
+	}
+	rt.Log.Info("Deleted all subscriptions")
+	w.WriteHeader(http.StatusOK)
 }
 
 // HealthHandler returns a healthy message
@@ -248,24 +261,23 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(body, &rewardEventResponse)
 	telemetry.RewardCount.Inc()
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
-		token := rt.Spotify.RefreshToken()
-		rt.Spotify.NextSong(token)
+		rt.Spotify.NextSong()
 	}
 	if rewardEventResponse.Event.Reward.Title == "Add Song" {
+		rt.Log.Info("Adding song to playlist")
 		spotifyURL := rewardEventResponse.Event.UserInput
-		token := rt.Spotify.RefreshToken()
-		rt.Spotify.AddToPlaylist(token, spotifyURL)
+		rt.Spotify.AddToPlaylist(spotifyURL)
 	}
 	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-		token := rt.Spotify.RefreshToken()
-		rt.Spotify.DeleteSongPlaylist(token)
+		rt.Spotify.DeleteSongPlaylist()
 	}
 }
 
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
-	test := rt.Secrets.GenerateNewToken()
-	rt.Secrets.StoreNewTokens(test)
+	rt.Log.Info("Testing")
+	rt.Actions.SendMessage("Test")
+	rt.Spotify.NextSong()
 }
 
 // StreamHandler sends a message to discord
@@ -287,4 +299,40 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 	if resp.StatusCode == 200 {
 		rt.Log.Info("Posting message to X")
 	}
+}
+
+// PlayingHandler displays music playing in spotify
+func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
+	token, _ := rt.Spotify.GetSpotifyToken()
+	if token.Token != "" {
+		song := rt.Spotify.GetSong()
+		if !song.IsPlaying {
+			rt.Log.Error("No Music", errorNoMusicPlaying)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		data := SongData{
+			Title:    song.Item.Name,
+			Artist:   song.Item.Artists[0].Name,
+			AlbumArt: song.Item.Album.Images[0].URL,
+		}
+		tmpl, err := template.ParseFiles("./templates/index.html")
+		if err != nil {
+			rt.Log.Error("Error parsing template", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		err = tmpl.Execute(w, data)
+		if err != nil {
+			http.Error(w, "Error executing template", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// PlaylistHandler displays the playlist
+func (rt *Router) PlaylistHandler(w http.ResponseWriter, _ *http.Request) {
+	songs := rt.Spotify.GetSongsPlaylist()
+	w.WriteHeader(http.StatusOK)
+	rt.Log.Info(songs)
 }

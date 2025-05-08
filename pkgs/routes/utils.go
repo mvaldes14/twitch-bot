@@ -44,21 +44,18 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 // GeneratePayload Builds the payload for each subscription type
 func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string {
 	rt.Log.Info("Generating payload for subscription type")
-	var payload string
 
 	// Define the condition based on subscription type
 	condition := map[string]string{
 		"broadcaster_user_id": userID,
 	}
 
-	// Add extra conditions for specific types
 	switch subType.Name {
 	case "chat":
 		condition["user_id"] = userID
 	case "follow":
 		condition["moderator_user_id"] = userID
 	case "subscribe", "cheer", "reward", "stream":
-		// These only need the base broadcaster_user_id
 	}
 
 	// Map subscription names to their endpoint paths
@@ -98,6 +95,7 @@ func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string
 
 	// Marshal the entire payload
 	payloadJSON, _ := json.Marshal(payloadStruct)
+	var payload string
 	payload = string(payloadJSON)
 	return payload
 }
