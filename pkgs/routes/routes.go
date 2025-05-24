@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"text/template"
+	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
@@ -37,6 +38,7 @@ type RequestJSON struct {
 	Headers map[string]string
 }
 
+// SongData represents the data for the song
 type SongData struct {
 	Title    string
 	Artist   string
@@ -45,12 +47,13 @@ type SongData struct {
 
 // Router is the struct that handles all routes
 type Router struct {
-	Subs    *subscriptions.Subscription
-	Secrets *secrets.SecretService
-	Actions *actions.Actions
-	Spotify *spotify.Spotify
-	Log     *telemetry.CustomLogger
-	Discord *discord.Discord
+	Subs            *subscriptions.Subscription
+	Secrets         *secrets.SecretService
+	Actions         *actions.Actions
+	Spotify         *spotify.Spotify
+	Log             *telemetry.CustomLogger
+	Discord         *discord.Discord
+	streamStartTime time.Time
 }
 
 // NewRouter creates a new router
@@ -180,10 +183,15 @@ func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
 			Version: "1",
 			Type:    "channel.channel_points_custom_reward_redemption.add",
 		},
-		"stream": {
+		"streamon": {
 			Name:    "stream",
 			Version: "1",
 			Type:    "stream.online",
+		},
+		"streamoff": {
+			Name:    "stream",
+			Version: "1",
+			Type:    "stream.offline",
 		},
 	}
 	if subTypeConfig, ok := subscriptionTypes[subType]; ok {
@@ -280,8 +288,9 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Spotify.NextSong()
 }
 
-// StreamHandler sends a message to discord
-func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
+// StreamOnlineHandler sends a message to discord
+func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
+	rt.streamStartTime = time.Now()
 	err := rt.Discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
 		rt.Log.Error("Sending message to discord", err)
@@ -298,6 +307,16 @@ func (rt *Router) StreamHandler(_ http.ResponseWriter, _ *http.Request) {
 	}
 	if resp.StatusCode == 200 {
 		rt.Log.Info("Posting message to X")
+	}
+}
+
+// StreamOfflineHandler tracks when streams end
+func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, _ *http.Request) {
+	if !rt.streamStartTime.IsZero() {
+		duration := time.Since(rt.streamStartTime).Seconds()
+		telemetry.StreamDuration.Observe(duration)
+		rt.Log.Info("Stream ended", "duration", duration)
+		rt.streamStartTime = time.Time{} // Reset
 	}
 }
 

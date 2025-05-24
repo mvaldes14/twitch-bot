@@ -65,7 +65,8 @@ func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string
 		"follow":    "follow",
 		"cheer":     "cheer",
 		"reward":    "reward",
-		"stream":    "stream",
+		"streamon":  "stream-online",
+		"streamoff": "stream-offline",
 	}[subType.Name]
 
 	// Create a struct for the payload
