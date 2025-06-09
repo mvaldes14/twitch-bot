@@ -56,6 +56,12 @@ type Router struct {
 	streamStartTime time.Time
 }
 
+// SubscriptionTypeRequest is the struct for generating new subscriptions
+type SubscriptionTypeRequest struct {
+	Type      string `json:"type"`
+	createdAt time.Time
+}
+
 // NewRouter creates a new router
 func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
 	actions := actions.NewActions(secretService)
@@ -83,11 +89,11 @@ func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		if r.Header.Get("Token") == token {
-			rt.Log.Info("Token is valid")
+		if r.Header.Get("Authorization") == token {
+			rt.Log.Info("Admin token is valid")
 			next.ServeHTTP(w, r)
 		} else {
-			rt.Log.Error("Admin Token is invalid", errorTokenNotValid)
+			rt.Log.Error("Admin token is invalid", errorTokenNotValid)
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
@@ -154,9 +160,15 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // CreateHandler creates a subscription based on the parameter
-func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	subType := query.Get("type")
+func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
+	requestType, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Could not parse payload", http.StatusInternalServerError)
+	}
+	defer r.Body.Close()
+	var requestTypeString SubscriptionTypeRequest
+	err = json.Unmarshal(requestType, &requestTypeString)
+
 	subscriptionTypes := map[string]subscriptions.SubscriptionType{
 		"chat": {
 			Name:    "chat",
@@ -194,10 +206,10 @@ func (rt *Router) CreateHandler(_ http.ResponseWriter, r *http.Request) {
 			Type:    "stream.offline",
 		},
 	}
-	if subTypeConfig, ok := subscriptionTypes[subType]; ok {
+	if subTypeConfig, ok := subscriptionTypes[string(requestTypeString.Type)]; ok {
 		payload := rt.GeneratePayload(subTypeConfig)
 		rt.Subs.CreateSubscription(payload)
-		rt.Log.Info("Subscription created: " + subType)
+		rt.Log.Info("Subscription created: " + requestTypeString.Type)
 	} else {
 		rt.Log.Error("Invalid subscription", errorInvalidSbuscription)
 	}

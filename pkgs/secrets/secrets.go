@@ -14,14 +14,15 @@ import (
 )
 
 const (
-	projectName   = "bots"
-	configName    = "tokens"
-	userToken     = "TWITCH_USER_TOKEN"
-	refreshToken  = "TWITCH_REFRESH_TOKEN"
-	twitchToken   = "TWITCH_TOKEN"
-	clientID      = "TWITCH_CLIENT_ID"
-	dopplerSecret = "TWITCH_CLIENT_SECRET"
-	dopplerToken  = "DOPPLER_TOKEN"
+	projectName     = "bots"
+	configName      = "tokens"
+	userToken       = "TWITCH_USER_TOKEN"
+	refreshToken    = "TWITCH_REFRESH_TOKEN"
+	twitchAppToken  = "TWITCH_APP_TOKEN"
+	twitchUserToken = "TWITCH_USER_TOKEN"
+	clientID        = "TWITCH_CLIENT_ID"
+	secretID        = "TWITCH_CLIENT_SECRET"
+	dopplerToken    = "DOPPLER_TOKEN"
 
 	// API Endpoints
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
@@ -52,7 +53,7 @@ func (s *SecretService) GetUserToken() string {
 
 // BuildSecretHeaders Returns the secrets from env variables to build headers for requests
 func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
-	token := os.Getenv(twitchToken)
+	token := os.Getenv(twitchAppToken)
 	clientID := os.Getenv(clientID)
 	if token == "" || clientID == "" {
 		err := errors.New("Token or Client ID not found in environment")
@@ -65,10 +66,31 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 	}, nil
 }
 
-// GenerateNewToken creates a new token by using the existing refresh token
-func (s *SecretService) GenerateNewToken() TwitchRefreshResponse {
+// GenerateUserToken acquires a new token that is valid for 2 months
+func (s *SecretService) GenerateUserToken() TwitchUserTokenResponse {
 	twitchID := os.Getenv(clientID)
-	twitchSecret := os.Getenv(dopplerSecret)
+	twitchSecret := os.Getenv(secretID)
+	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecret)
+	headers := map[string]string{
+		"Content-Type": "application/json",
+	}
+	req := RequestJson{
+		Method:  "POST",
+		URL:     twitchTokenURL,
+		Payload: payload,
+		Headers: headers,
+	}
+	var response TwitchUserTokenResponse
+	if err := s.MakeRequestMarshallJSON(&req, &response); err != nil {
+		s.Log.Error("Failed to make request", err)
+	}
+	return response
+}
+
+// RefreshAppToken uses the refresh token to get a new one
+func (s *SecretService) RefreshAppToken() TwitchRefreshResponse {
+	twitchID := os.Getenv(clientID)
+	twitchSecret := os.Getenv(secretID)
 	twitchRefreshToken := os.Getenv(refreshToken)
 	payload := fmt.Sprintf("grant_type=refresh_token&refresh_token=%v&client_id=%v&client_secret=%v", twitchRefreshToken, twitchID, twitchSecret)
 	headers := map[string]string{
@@ -116,7 +138,7 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 }
 
 // StoreNewTokens stores new tokens in Doppler
-func (s *SecretService) StoreNewTokens(value string) error {
+func (s *SecretService) StoreNewTokens(key, value string) error {
 	dopplerToken := os.Getenv(dopplerToken)
 	if dopplerToken == "" {
 		s.Log.Error("Doppler Token empty", errDopplerMissingToken)
@@ -131,8 +153,8 @@ func (s *SecretService) StoreNewTokens(value string) error {
 	payload = fmt.Sprintf(`{
 		"project": "%v",
 		"config": "%v",
-    "secrets": {"SPOTIFY_TOKEN": "%v"}
-	}`, projectName, configName, value)
+    "secrets": {"%v": "%v"}
+	}`, projectName, configName, key, value)
 
 	req := RequestJson{
 		Method:  "POST",

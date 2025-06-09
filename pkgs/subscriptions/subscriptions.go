@@ -75,6 +75,8 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	if err != nil {
 		s.Log.Error("Error getting headers for GetSubscriptions", err)
 	}
+	fmt.Println("Headers:", headers)
+	s.Log.Info("Secret Headers for GetSubscriptions found")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -85,8 +87,10 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	var subscriptionList ValidateSubscription
-	json.Unmarshal(body, &subscriptionList)
-	fmt.Printf("%+v", subscriptionList)
+	err = json.Unmarshal(body, &subscriptionList)
+	if err != nil {
+		s.Log.Error("Error unmarshalling response:", err)
+	}
 	return subscriptionList, nil
 }
 
