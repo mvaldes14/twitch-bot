@@ -1,0 +1,9 @@
+GET localhost:3000/health
+
+GET localhost:3000/metrics
+
+GET localhost:3000/api/list
+Content-Type: application/json
+Token: {{ADMIN_TOKEN}}
+
+POST localhost:3000/api/create

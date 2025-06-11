@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -146,7 +147,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		if err != nil {
 			a.Log.Error("Failed to build headers to update channel", err)
 		}
-		userToken := a.Secrets.GetUserToken()
+		userToken := os.Getenv("TWITCH_USER_TOKEN")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)

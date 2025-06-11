@@ -1,7 +1,8 @@
+// Package secrets provides types and structures for handling secrets and API requests.
 package secrets
 
-// RequestJson represents a JSON HTTP request
-type RequestJson struct {
+// RequestJSON represents a JSON HTTP request
+type RequestJSON struct {
 	Method  string
 	URL     string
 	Payload string
@@ -22,6 +23,13 @@ type TwitchRefreshResponse struct {
 	TokenType    string   `json:"token_type"`
 }
 
+// TwitchUserTokenResponse represents the response from getting a new user token
+type TwitchUserTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	TokenType   string `json:"token_type"`
+}
+
 // DopplerSecretUpdate represents the response from Doppler API
 type DopplerSecretUpdate struct {
 	Messages []string `json:"messages"`
@@ -29,4 +37,13 @@ type DopplerSecretUpdate struct {
 		Name string `json:"name"`
 	} `json:"data"`
 	Success bool `json:"success"`
+}
+
+// TwitchValidResponse checks if a token is valid
+type TwitchValidResponse struct {
+	ClientID  string   `json:"client_id"`
+	Login     string   `json:"login"`
+	Scopes    []string `json:"scopes"`
+	UserID    string   `json:"user_id"`
+	ExpiresIn int      `json:"expires_in"`
 }
