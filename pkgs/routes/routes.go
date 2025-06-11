@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
+	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/discord"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
@@ -54,6 +55,7 @@ type Router struct {
 	Log             *telemetry.CustomLogger
 	Discord         *discord.Discord
 	streamStartTime time.Time
+	Cache           *cache.Service
 }
 
 // SubscriptionTypeRequest is the struct for generating new subscriptions
@@ -68,6 +70,7 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 	spotify := spotify.NewSpotify()
 	discord := discord.NewDiscord()
 	logger := telemetry.NewLogger("router")
+	cache := cache.NewCacheService()
 	return &Router{
 		Log:     logger,
 		Subs:    subs,
@@ -75,6 +78,7 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 		Actions: actions,
 		Spotify: spotify,
 		Discord: discord,
+		Cache:   cache,
 	}
 }
 
@@ -82,7 +86,6 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		telemetry.APICallCount.Inc()
-		rt.Log.Info("Checking for admin token")
 		token := os.Getenv(adminToken)
 		if token == "" {
 			rt.Log.Error("Admin Token missing", errorTokenNotFound)
@@ -90,7 +93,6 @@ func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 			return
 		}
 		if r.Header.Get("Authorization") == token {
-			rt.Log.Info("Admin token is valid")
 			next.ServeHTTP(w, r)
 		} else {
 			rt.Log.Error("Admin token is invalid", errorTokenNotValid)
@@ -339,30 +341,27 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // PlayingHandler displays music playing in spotify
 func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
-	token, _ := rt.Spotify.GetSpotifyToken()
-	if token.Token != "" {
-		song := rt.Spotify.GetSong()
-		if !song.IsPlaying {
-			rt.Log.Error("No Music", errorNoMusicPlaying)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		data := SongData{
-			Title:    song.Item.Name,
-			Artist:   song.Item.Artists[0].Name,
-			AlbumArt: song.Item.Album.Images[0].URL,
-		}
-		tmpl, err := template.ParseFiles("./templates/index.html")
-		if err != nil {
-			rt.Log.Error("Error parsing template", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		err = tmpl.Execute(w, data)
-		if err != nil {
-			http.Error(w, "Error executing template", http.StatusInternalServerError)
-			return
-		}
+	song := rt.Spotify.GetSong()
+	if !song.IsPlaying {
+		rt.Log.Error("No Music", errorNoMusicPlaying)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	data := SongData{
+		Title:    song.Item.Name,
+		Artist:   song.Item.Artists[0].Name,
+		AlbumArt: song.Item.Album.Images[0].URL,
+	}
+	tmpl, err := template.ParseFiles("./templates/index.html")
+	if err != nil {
+		rt.Log.Error("Error parsing template", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Error executing template", http.StatusInternalServerError)
+		return
 	}
 }
 

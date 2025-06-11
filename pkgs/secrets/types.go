@@ -38,3 +38,12 @@ type DopplerSecretUpdate struct {
 	} `json:"data"`
 	Success bool `json:"success"`
 }
+
+// TwitchValidResponse checks if a token is valid
+type TwitchValidResponse struct {
+	ClientID  string   `json:"client_id"`
+	Login     string   `json:"login"`
+	Scopes    []string `json:"scopes"`
+	UserID    string   `json:"user_id"`
+	ExpiresIn int      `json:"expires_in"`
+}

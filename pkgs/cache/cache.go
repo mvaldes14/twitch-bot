@@ -20,7 +20,7 @@ type Service struct {
 type Token struct {
 	Key        string
 	Value      string
-	Expiration int
+	Expiration time.Duration
 }
 
 var (
@@ -36,7 +36,7 @@ func NewCacheService() *Service {
 	if cacheInstance != nil {
 		return cacheInstance
 	}
-	
+
 	logger := telemetry.NewLogger("cache")
 	rdb = redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
@@ -50,32 +50,33 @@ func NewCacheService() *Service {
 }
 
 // GetToken retrieves a token from Redis
-func (c *Service) GetToken(key string) (any, error) {
+func (c *Service) GetToken(key string) (string, error) {
 	c.Log.Info("Retrieving token from Redis", key)
 	val, err := rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
 		c.Log.Error("Token not found in Redis", errorNoToken)
-		return nil, err
+		return "", err
 	}
 	var token Token
 	if err := json.Unmarshal([]byte(val), &token); err != nil {
 		c.Log.Error("Failed to unmarshal token", err)
-		return nil, err
+		return "", err
 	}
-	return &token, nil
+	return token.Value, nil
 }
 
 // StoreToken stores a key token in Redis
 func (c *Service) StoreToken(tk Token) error {
 	c.Log.Info("Storing token in Redis", tk.Key)
-	jsonToken, err := json.Marshal(tk.Value)
+	jsonToken, err := json.Marshal(tk)
 	if err != nil {
 		c.Log.Error("Failed to marshal token", err)
 		return err
 	}
-	if err := rdb.Set(ctx, tk.Key, jsonToken, time.Duration(tk.Expiration)).Err(); err != nil {
+	if err := rdb.Set(ctx, tk.Key, jsonToken, tk.Expiration).Err(); err != nil {
 		c.Log.Error("Failed to store token in Redis", err)
 		return err
 	}
+	c.Log.Info("Token stored successfully", tk.Key)
 	return nil
 }
