@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -37,12 +38,14 @@ func NewCacheService() *Service {
 		return cacheInstance
 	}
 
+	redisURL := os.Getenv("REDIS_URL")
+
 	logger := telemetry.NewLogger("cache")
 	rdb = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: redisURL,
 	})
 	if _, err := rdb.Ping(ctx).Result(); err != nil {
-		logger.Error("Failed to connect to Redis", err)
+		panic("Could not connect to Redis: " + err.Error())
 	}
 	logger.Info("Connected to Redis successfully")
 	cacheInstance = &Service{Log: logger}
