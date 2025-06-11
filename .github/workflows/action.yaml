@@ -22,7 +22,7 @@ jobs:
       - name: Generate tag
         id: generate_tag
         run: |
-          TIMESTAMP=$(date %Y%m%d-%H%M%S)
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           echo "Generated timestamp tag: $TIMESTAMP"
           echo "IMAGE_TAG=$TIMESTAMP" >> $GITHUB_OUTPUT
 

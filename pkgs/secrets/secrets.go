@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
@@ -37,13 +38,15 @@ var (
 
 // SecretService implements SecretManager interface
 type SecretService struct {
-	Log *telemetry.CustomLogger
+	Log   *telemetry.CustomLogger
+	Cache *cache.Service
 }
 
 // NewSecretService creates a new instance of SecretService
 func NewSecretService() *SecretService {
 	logger := telemetry.NewLogger("secrets")
-	return &SecretService{Log: logger}
+	cache := cache.NewCacheService()
+	return &SecretService{Log: logger, Cache: cache}
 }
 
 // GetUserToken retrieves the user token from environment
@@ -67,24 +70,35 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 }
 
 // GenerateUserToken acquires a new token that is valid for 2 months
-func (s *SecretService) GenerateUserToken() TwitchUserTokenResponse {
+func (s *SecretService) GenerateUserToken() (TwitchUserTokenResponse, error) {
+	s.Log.Info("Generating new user token")
 	twitchID := os.Getenv(clientID)
 	twitchSecret := os.Getenv(secretID)
+	if twitchID == "" || twitchSecret == "" {
+		s.Log.Error("Twitch ID or Secret not found in environment", errors.New("Twitch ID or Secret not found"))
+		return TwitchUserTokenResponse{}, errors.New("Twitch ID or Secret not found in environment")
+	}
 	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecret)
 	headers := map[string]string{
 		"Content-Type": "application/json",
 	}
-	req := RequestJson{
+	req := RequestJSON{
 		Method:  "POST",
 		URL:     twitchTokenURL,
 		Payload: payload,
 		Headers: headers,
 	}
 	var response TwitchUserTokenResponse
-	if err := s.MakeRequestMarshallJSON(&req, &response); err != nil {
-		s.Log.Error("Failed to make request", err)
+	s.Cache.StoreToken(cache.Token{
+		Key:        "TWITCH_USER_TOKEN",
+		Value:      response.AccessToken,
+		Expiration: response.ExpiresIn,
+	})
+	fmt.Println(response)
+	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
+		s.Log.Error("Failed to make request generating user token", err)
 	}
-	return response
+	return response, nil
 }
 
 // RefreshAppToken uses the refresh token to get a new one
@@ -96,21 +110,81 @@ func (s *SecretService) RefreshAppToken() TwitchRefreshResponse {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	req := RequestJson{
+	req := RequestJSON{
 		Method:  "POST",
 		URL:     twitchTokenURL,
 		Payload: payload,
 		Headers: headers,
 	}
 	var response TwitchRefreshResponse
-	if err := s.MakeRequestMarshallJSON(&req, &response); err != nil {
-		s.Log.Error("Failed to make request", err)
+	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
+		s.Log.Error("Failed to make request refreshing token", err)
 	}
 	return response
 }
 
+// ValidateDopplerToken checks if the Doppler token is valid
+func (s *SecretService) ValidateDopplerToken(token string) error {
+	headers := map[string]string{
+		"Accept":        "application/json",
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer " + token,
+	}
+	req := RequestJSON{
+		Method:  "GET",
+		URL:     dopplerAPIURL,
+		Payload: "",
+		Headers: headers,
+	}
+	var response DopplerSecretUpdate
+	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
+		s.Log.Error("Failed to send request to validate Doppler token", err)
+		return errDopplerAPIErr
+	}
+	if !response.Success {
+		return errDopplerAPIErr
+	}
+	return nil
+}
+
+// StoreNewTokens stores new tokens in Doppler
+func (s *SecretService) StoreNewTokens(key, value string) error {
+	dopplerToken := os.Getenv(dopplerToken)
+	if err := s.ValidateDopplerToken(dopplerToken); err != nil {
+		return errors.New("Doppler token is not valid")
+	}
+	headers := map[string]string{
+		"Accept":        "application/json",
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer " + dopplerToken,
+	}
+	var payload string
+	payload = fmt.Sprintf(`{
+		"project": "%v",
+		"config": "%v",
+    "secrets": {"%v": "%v"}
+	}`, projectName, configName, key, value)
+
+	req := RequestJSON{
+		Method:  "POST",
+		URL:     dopplerAPIURL,
+		Payload: payload,
+		Headers: headers,
+	}
+	s.Log.Info("Storing new tokens in Doppler value: ", key)
+	var response DopplerSecretUpdate
+	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
+		s.Log.Error("Failed to send request", err)
+		return errDopplerSaveSecret
+	}
+	if !response.Success {
+		return errDopplerSaveSecret
+	}
+	return nil
+}
+
 // MakeRequestMarshallJSON makes a request and marshals the response into the target interface
-func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) error {
+func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) error {
 	httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBuffer([]byte(req.Payload)))
 	if err != nil {
 		return err
@@ -135,41 +209,4 @@ func (s *SecretService) MakeRequestMarshallJSON(req *RequestJson, target any) er
 		return err
 	}
 	return json.Unmarshal(body, target)
-}
-
-// StoreNewTokens stores new tokens in Doppler
-func (s *SecretService) StoreNewTokens(key, value string) error {
-	dopplerToken := os.Getenv(dopplerToken)
-	if dopplerToken == "" {
-		s.Log.Error("Doppler Token empty", errDopplerMissingToken)
-		return errDopplerMissingToken
-	}
-	headers := map[string]string{
-		"Accept":        "application/json",
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer " + dopplerToken,
-	}
-	var payload string
-	payload = fmt.Sprintf(`{
-		"project": "%v",
-		"config": "%v",
-    "secrets": {"%v": "%v"}
-	}`, projectName, configName, key, value)
-
-	req := RequestJson{
-		Method:  "POST",
-		URL:     dopplerAPIURL,
-		Payload: payload,
-		Headers: headers,
-	}
-	s.Log.Info("Storing new tokens in Doppler")
-	var response DopplerSecretUpdate
-	if err := s.MakeRequestMarshallJSON(&req, &response); err != nil {
-		s.Log.Error("Failed to send request", err)
-		return errDopplerSaveSecret
-	}
-	if !response.Success {
-		return errDopplerSaveSecret
-	}
-	return nil
 }

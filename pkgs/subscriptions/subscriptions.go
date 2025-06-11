@@ -74,8 +74,8 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	headers, err := s.Secrets.BuildSecretHeaders()
 	if err != nil {
 		s.Log.Error("Error getting headers for GetSubscriptions", err)
+		return ValidateSubscription{}, err
 	}
-	fmt.Println("Headers:", headers)
 	s.Log.Info("Secret Headers for GetSubscriptions found")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -84,6 +84,17 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		s.Log.Error("Error sending request:", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		s.Log.Error("Error received from Twitch API:", errors.New(resp.Status))
+		newToken, err := s.Secrets.GenerateUserToken()
+		if newToken.AccessToken == "" || err != nil {
+			return ValidateSubscription{}, errors.New("failed to generate new user token")
+		}
+		err = s.Secrets.StoreNewTokens("TWITCH_USER_TOKEN", newToken.AccessToken)
+		if err != nil {
+			return ValidateSubscription{}, fmt.Errorf("error received from Twitch API: %s", resp.Status)
+		}
 	}
 	body, _ := io.ReadAll(resp.Body)
 	var subscriptionList ValidateSubscription

@@ -1,7 +1,8 @@
+// Package secrets provides types and structures for handling secrets and API requests.
 package secrets
 
-// RequestJson represents a JSON HTTP request
-type RequestJson struct {
+// RequestJSON represents a JSON HTTP request
+type RequestJSON struct {
 	Method  string
 	URL     string
 	Payload string

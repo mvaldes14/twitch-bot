@@ -150,8 +150,13 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList, err := rt.Subs.GetSubscriptions()
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
-	rt.Log.Info("Current Subscription List")
+	if subsList.Total == 0 {
+		rt.Log.Info("No subscriptions found")
+		return
+	}
+	rt.Log.Info("Current Subscription List: ", subsList.Total)
 	for _, sub := range subsList.Data {
 		rt.Log.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
 		subItem := fmt.Sprintf("ID:%s, Status: %s, Type: %s\n", sub.ID, sub.Status, sub.Type)
