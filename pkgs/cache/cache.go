@@ -83,3 +83,14 @@ func (c *Service) StoreToken(tk Token) error {
 	c.Log.Info("Token stored successfully", tk.Key)
 	return nil
 }
+
+// DeleteToken removes a token from Redis
+func (c *Service) DeleteToken(key string) error {
+	c.Log.Info("Deleting token from Redis", key)
+	if err := rdb.Del(ctx, key).Err(); err != nil {
+		c.Log.Error("Failed to delete token from Redis", err)
+		return err
+	}
+	c.Log.Info("Token deleted successfully", key)
+	return nil
+}

@@ -288,15 +288,21 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(body, &rewardEventResponse)
 	telemetry.RewardCount.Inc()
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
-		rt.Spotify.NextSong()
+		if err := rt.Spotify.NextSong(); err != nil {
+			rt.Log.Error("Failed to skip to next song", err)
+		}
 	}
 	if rewardEventResponse.Event.Reward.Title == "Add Song" {
 		rt.Log.Info("Adding song to playlist")
 		spotifyURL := rewardEventResponse.Event.UserInput
-		rt.Spotify.AddToPlaylist(spotifyURL)
+		if err := rt.Spotify.AddToPlaylist(spotifyURL); err != nil {
+			rt.Log.Error("Failed to add song to playlist", err)
+		}
 	}
 	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-		rt.Spotify.DeleteSongPlaylist()
+		if err := rt.Spotify.DeleteSongPlaylist(); err != nil {
+			rt.Log.Error("Failed to reset playlist", err)
+		}
 	}
 }
 
@@ -341,9 +347,19 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, _ *http.Request) {
 
 // PlayingHandler displays music playing in spotify
 func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
-	song := rt.Spotify.GetSong()
+	song, err := rt.Spotify.GetSong()
+	if err != nil {
+		rt.Log.Error("Failed to get current song", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	if !song.IsPlaying {
 		rt.Log.Error("No Music", errorNoMusicPlaying)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if song.Item.Name == "" || len(song.Item.Artists) == 0 || len(song.Item.Album.Images) == 0 {
+		rt.Log.Error("Incomplete song data", errorNoMusicPlaying)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -367,7 +383,12 @@ func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
 
 // PlaylistHandler displays the playlist
 func (rt *Router) PlaylistHandler(w http.ResponseWriter, _ *http.Request) {
-	songs := rt.Spotify.GetSongsPlaylist()
+	songs, err := rt.Spotify.GetSongsPlaylist()
+	if err != nil {
+		rt.Log.Error("Failed to get playlist songs", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	rt.Log.Info(songs)
 }

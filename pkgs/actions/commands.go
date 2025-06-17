@@ -65,7 +65,16 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!youtube":
 		a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
-		song := a.Spotify.GetSong()
+		song, err := a.Spotify.GetSong()
+		if err != nil {
+			a.Log.Error("Failed to get current song", err)
+			a.SendMessage("Sorry, couldn't get the current song")
+			return
+		}
+		if song.Item.Name == "" || len(song.Item.Artists) == 0 {
+			a.SendMessage("No song currently playing")
+			return
+		}
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
 		a.Log.Info(msg)
 		a.SendMessage(msg)
