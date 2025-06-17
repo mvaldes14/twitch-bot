@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
@@ -23,6 +24,7 @@ const (
 	twitchClientID     = "TWITCH_CLIENT_ID"
 	twitchSecret       = "TWITCH_CLIENT_SECRET"
 	dopplerToken       = "DOPPLER_TOKEN"
+	requestTimeout     = 30 * time.Second
 
 	// API Endpoints
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
@@ -39,15 +41,17 @@ var (
 
 // SecretService implements SecretManager interface
 type SecretService struct {
-	Log   *telemetry.CustomLogger
-	Cache *cache.Service
+	Log        *telemetry.CustomLogger
+	Cache      *cache.Service
+	httpClient *http.Client
 }
 
 // NewSecretService creates a new instance of SecretService
 func NewSecretService() *SecretService {
 	logger := telemetry.NewLogger("secrets")
 	cache := cache.NewCacheService()
-	return &SecretService{Log: logger, Cache: cache}
+	httpClient := &http.Client{Timeout: requestTimeout}
+	return &SecretService{Log: logger, Cache: cache, httpClient: httpClient}
 }
 
 // BuildSecretHeaders Returns the secrets from env variables to build headers for requests
@@ -169,9 +173,8 @@ func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) err
 	for k, v := range req.Headers {
 		httpReq.Header.Set(k, v)
 	}
-	client := &http.Client{}
 	s.Log.Info("Sending request to:", req.URL)
-	resp, err := client.Do(httpReq)
+	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		return err
 	}
@@ -181,7 +184,6 @@ func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-	fmt.Println("Response body:", string(body))
 	if err != nil {
 		return err
 	}
