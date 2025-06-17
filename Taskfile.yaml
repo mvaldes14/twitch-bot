@@ -1,0 +1,16 @@
+version: '3'
+
+tasks:
+  dev:
+    description: "Runs the webserver"
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - go run .
+
+  list:
+    description: "Gets list of current subscriptions"
+    cmds:
+      - | 
+        curl -H 'Authorization: {{.ADMIN_TOKEN}}' \
+        -H "Content-Type: application/json" \
+        http://localhost:3000/api/list

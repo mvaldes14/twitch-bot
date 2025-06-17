@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
@@ -28,14 +30,17 @@ var (
 type Subscription struct {
 	Secrets *secrets.SecretService
 	Log     *telemetry.CustomLogger
+	Cache   *cache.Service
 }
 
 // NewSubscription creates a new subscription
 func NewSubscription(secretService *secrets.SecretService) *Subscription {
 	log := telemetry.NewLogger("subscriptions")
+	cache := cache.NewCacheService()
 	return &Subscription{
 		Secrets: secretService,
 		Log:     log,
+		Cache:   cache,
 	}
 }
 
@@ -71,22 +76,33 @@ func (s *Subscription) CreateSubscription(payload string) error {
 // GetSubscriptions Retrieves all subscriptions for the application
 func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	req, _ := http.NewRequest("GET", URL, nil)
-	headers, err := s.Secrets.BuildSecretHeaders()
-	if err != nil {
-		s.Log.Error("Error getting headers for GetSubscriptions", err)
-	}
+	token := os.Getenv("TWITCH_USER_TOKEN")
+	clientID := os.Getenv("TWITCH_CLIENT_ID")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+headers.Token)
-	req.Header.Set("Client-Id", headers.ClientID)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Client-Id", clientID)
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	if err != nil {
-		s.Log.Error("Error sending request:", err)
-	}
+	// if err != nil {
+	// 	s.Log.Error("Error sending request:", err)
+	// }
+	// if resp.StatusCode != http.StatusOK {
+	// 	s.Log.Error("Error received from Twitch API:", errors.New(resp.Status))
+	// 	newToken, err := s.Secrets.GenerateUserToken()
+	// 	if newToken.AccessToken == "" || err != nil {
+	// 		return ValidateSubscription{}, errors.New("failed to generate new user token")
+	// 	}
+	// 	err = s.Secrets.StoreNewTokens("TWITCH_USER_TOKEN", newToken.AccessToken)
+	// 	if err != nil {
+	// 		return ValidateSubscription{}, fmt.Errorf("error received from Twitch API: %s", resp.Status)
+	// 	}
+	// }
 	body, _ := io.ReadAll(resp.Body)
 	var subscriptionList ValidateSubscription
-	json.Unmarshal(body, &subscriptionList)
-	fmt.Printf("%+v", subscriptionList)
+	err = json.Unmarshal(body, &subscriptionList)
+	if err != nil {
+		s.Log.Error("Error unmarshalling response:", err)
+	}
 	return subscriptionList, nil
 }
 

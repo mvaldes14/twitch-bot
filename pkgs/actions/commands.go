@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -64,7 +65,16 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!youtube":
 		a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
-		song := a.Spotify.GetSong()
+		song, err := a.Spotify.GetSong()
+		if err != nil {
+			a.Log.Error("Failed to get current song", err)
+			a.SendMessage("Sorry, couldn't get the current song")
+			return
+		}
+		if song.Item.Name == "" || len(song.Item.Artists) == 0 {
+			a.SendMessage("No song currently playing")
+			return
+		}
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
 		a.Log.Info(msg)
 		a.SendMessage(msg)
@@ -146,7 +156,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		if err != nil {
 			a.Log.Error("Failed to build headers to update channel", err)
 		}
-		userToken := a.Secrets.GetUserToken()
+		userToken := os.Getenv("TWITCH_USER_TOKEN")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
