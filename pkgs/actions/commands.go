@@ -46,6 +46,8 @@ func NewActions(secrets *secrets.SecretService) *Actions {
 
 // ParseMessage Parses the incoming messages from stream
 func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
+	payload := fmt.Sprintf("%s: %s", msg.Event.ChatterUserName, msg.Event.Message.Text)
+	a.Log.Chat(payload)
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
