@@ -26,13 +26,6 @@ var (
 	sp = spotify.NewSpotify()
 )
 
-func validateDopplerToken() {
-	doplerToken := os.Getenv("DOPPLER_TOKEN")
-	if doplerToken == "" {
-		panic("Doppler token is not set in the environment")
-	}
-}
-
 func refreshTokens() {
 	twitchUToken, err := c.GetToken("TWITCH_USER_TOKEN")
 	if err == nil {
@@ -85,9 +78,6 @@ func refreshTokens() {
 func main() {
 	const port = ":3000"
 	logger := telemetry.NewLogger("main")
-
-	// Validate if doppler token is available otherwise stop the server
-	validateDopplerToken()
 
 	// Store tokens that expire in cache
 	refreshTokens()

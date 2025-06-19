@@ -16,20 +16,16 @@ import (
 )
 
 const (
-	projectName        = "bots"
-	configName         = "tokens"
 	twitchRefreshToken = "TWITCH_REFRESH_TOKEN"
 	twitchAppToken     = "TWITCH_APP_TOKEN"
 	twitchUserToken    = "TWITCH_USER_TOKEN"
 	twitchClientID     = "TWITCH_CLIENT_ID"
 	twitchSecret       = "TWITCH_CLIENT_SECRET"
-	dopplerToken       = "DOPPLER_TOKEN"
 	requestTimeout     = 30 * time.Second
 
 	// API Endpoints
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
 	twitchValidURL = "https://id.twitch.tv/oauth2/validate"
-	dopplerAPIURL  = "https://api.doppler.com/v3/configs/config/secrets"
 )
 
 var (
@@ -129,39 +125,6 @@ func (s *SecretService) ValidateToken(token string) bool {
 		return false
 	}
 	return true
-}
-
-// StoreNewTokens stores new tokens in Doppler
-func (s *SecretService) StoreNewTokens(key, value string) error {
-	dopplerToken := os.Getenv(dopplerToken)
-	headers := map[string]string{
-		"Accept":        "application/json",
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer " + dopplerToken,
-	}
-	var payload string
-	payload = fmt.Sprintf(`{
-		"project": "%v",
-		"config": "%v",
-    "secrets": {"%v": "%v"}
-	}`, projectName, configName, key, value)
-
-	req := RequestJSON{
-		Method:  "POST",
-		URL:     dopplerAPIURL,
-		Payload: payload,
-		Headers: headers,
-	}
-	s.Log.Info("Storing new tokens in Doppler value: ", key)
-	var response DopplerSecretUpdate
-	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error("Failed to send request", err)
-		return errDopplerSaveSecret
-	}
-	if !response.Success {
-		return errDopplerSaveSecret
-	}
-	return nil
 }
 
 // MakeRequestMarshallJSON makes a request and marshals the response into the target interface
