@@ -224,6 +224,7 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 
 // ChatHandler responds to chat messages
 func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.ChatMessageCount.Inc()
 	var chatEvent subscriptions.ChatMessageEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -259,12 +260,12 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &subEventResponse)
 	// send to chat
-	telemetry.SubscriptionCount.Inc()
 	rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
 }
 
 // CheerHandler responds to cheer events
 func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.CheerCount.Inc()
 	var cheerEventResponse subscriptions.CheerEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -273,12 +274,12 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	json.Unmarshal(body, &cheerEventResponse)
 	// send to chat
-	telemetry.CheerCount.Inc()
 	rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
 }
 
 // RewardHandler responds to reward events
 func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.RewardCount.Inc()
 	var rewardEventResponse subscriptions.RewardEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -286,7 +287,6 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 	json.Unmarshal(body, &rewardEventResponse)
-	telemetry.RewardCount.Inc()
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
 		if err := rt.Spotify.NextSong(); err != nil {
 			rt.Log.Error("Failed to skip to next song", err)
@@ -316,6 +316,7 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 // StreamOnlineHandler sends a message to discord
 func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.streamStartTime = time.Now()
+	telemetry.StreamDuration.Observe(0)
 	err := rt.Discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
 		rt.Log.Error("Sending message to discord", err)
