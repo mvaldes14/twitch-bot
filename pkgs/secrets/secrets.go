@@ -3,12 +3,15 @@ package secrets
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
@@ -16,23 +19,34 @@ import (
 )
 
 const (
-	twitchRefreshToken = "TWITCH_REFRESH_TOKEN"
-	twitchAppToken     = "TWITCH_APP_TOKEN"
-	twitchUserToken    = "TWITCH_USER_TOKEN"
-	twitchClientID     = "TWITCH_CLIENT_ID"
-	twitchSecret       = "TWITCH_CLIENT_SECRET"
-	requestTimeout     = 30 * time.Second
+	twitchRefreshToken   = "TWITCH_REFRESH_TOKEN"
+	twitchAppToken       = "TWITCH_APP_TOKEN"
+	twitchUserToken      = "TWITCH_USER_TOKEN"
+	twitchClientID       = "TWITCH_CLIENT_ID"
+	twitchSecret         = "TWITCH_CLIENT_SECRET"
+	spotifyRefreshToken  = "SPOTIFY_REFRESH_TOKEN"
+	spotifyClientID      = "SPOTIFY_CLIENT_ID"
+	spotifyClientSecret  = "SPOTIFY_CLIENT_SECRET"
+	requestTimeout       = 30 * time.Second
+	twitchUserExpiration = 5259487
+	twitchAppExpiration  = 14400
+	spotifyExpiration    = 3600
 
 	// API Endpoints
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
 	twitchValidURL = "https://id.twitch.tv/oauth2/validate"
+	tokenURL       = "https://accounts.spotify.com/api/token"
 )
 
 var (
-	errDopplerSaveSecret   = errors.New("Failed to store secret in Doppler")
-	errDopplerMissingToken = errors.New("Doppler token not found in environment")
-	errDopplerAPIErr       = errors.New("Error received from Doppler API")
-	errMissingTokenOrID    = errors.New("Token or Client ID not found in environment")
+	errMissingTokenOrID      = errors.New("Token or Client ID not found in environment")
+	errFailedToInit          = errors.New("Failed to initialize secrets, check environment variables")
+	errSpotifyMissingSecrets = errors.New("Missing credentials from environment")
+	errSpotifyNoToken        = errors.New("Failed to produce a new token")
+	errInvalidURL            = errors.New("Invalid URL to add to Spotify Playlist")
+	errInvalidRequest        = errors.New("Failed to create HTTP request")
+	errHTTPRequest           = errors.New("HTTP request failed")
+	errResponseParsing       = errors.New("Failed to parse response")
 )
 
 // SecretService implements SecretManager interface
@@ -50,13 +64,64 @@ func NewSecretService() *SecretService {
 	return &SecretService{Log: logger, Cache: cache, httpClient: httpClient}
 }
 
+// InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
+func (s *SecretService) InitSecrets() error {
+	twitchUToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
+	if err == nil {
+		os.Setenv("TWITCH_USER_TOKEN", twitchUToken)
+	}
+
+	twitchAToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
+	if err == nil {
+		os.Setenv("TWITCH_APP_TOKEN", twitchAToken)
+	}
+
+	spotifyToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
+	if err == nil {
+		os.Setenv("SPOTIFY_TOKEN", spotifyToken)
+	}
+	switch {
+	case twitchUToken == "":
+		twitchUserToken, err := s.GenerateUserToken()
+		if err != nil {
+			fmt.Println(err)
+		}
+		s.Cache.StoreToken(cache.Token{
+			Key:        "TWITCH_USER_TOKEN",
+			Value:      twitchUserToken,
+			Expiration: time.Duration(twitchUserExpiration) * time.Second,
+		})
+	case twitchAToken == "":
+		twitchAppToken, err := s.RefreshAppToken()
+		if err != nil {
+			fmt.Println(err)
+		}
+		s.Cache.StoreToken(cache.Token{
+			Key:        "TWITCH_APP_TOKEN",
+			Value:      twitchAppToken,
+			Expiration: time.Duration(twitchAppExpiration) * time.Second,
+		})
+	case spotifyToken == "":
+		spotifyToken, err := s.GetSpotifyToken()
+		if err != nil {
+			fmt.Println(err)
+		}
+		s.Cache.StoreToken(cache.Token{
+			Key:        "SPOTIFY_TOKEN",
+			Value:      spotifyToken,
+			Expiration: time.Duration(spotifyExpiration) * time.Second,
+		})
+	}
+	return errFailedToInit
+}
+
 // BuildSecretHeaders Returns the secrets from env variables to build headers for requests
 func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 	token := os.Getenv(twitchAppToken)
 	clientID := os.Getenv(twitchClientID)
 	if token == "" || clientID == "" {
-		s.Log.Error("Token or Client ID not found in environment", errDopplerMissingToken)
-		return RequestHeader{}, errDopplerMissingToken
+		s.Log.Error("Missing Twitch token or Client ID in environment", errMissingTokenOrID)
+		return RequestHeader{}, errMissingTokenOrID
 	}
 	return RequestHeader{
 		Token:    token,
@@ -141,14 +206,68 @@ func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) err
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode != http.StatusOK {
-		s.Log.Error("Error received from Doppler API", errDopplerAPIErr)
-		return errDopplerAPIErr
-	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(body, target)
+}
+
+// GetSpotifyToken retrieves a new Spotify token using the refresh token
+func (s *SecretService) GetSpotifyToken() (string, error) {
+	refreshToken := os.Getenv(spotifyRefreshToken)
+	clientID := os.Getenv(spotifyClientID)
+	clientSecret := os.Getenv(spotifyClientSecret)
+
+	if refreshToken == "" || clientID == "" || clientSecret == "" {
+		s.Log.Error("Missing Spotify credentials in environment", errSpotifyMissingSecrets)
+		return "", errSpotifyMissingSecrets
+	}
+
+	encodedToken := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
+	params := url.Values{}
+	params.Set("grant_type", "refresh_token")
+	params.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
+	if err != nil {
+		s.Log.Error("Error forming request for GetSpotifyToken", err)
+		return "", errInvalidRequest
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Basic "+encodedToken)
+
+	s.Log.Info("Requesting New Spotify token")
+	res, err := s.httpClient.Do(req)
+	if err != nil {
+		s.Log.Error("Error sending request to get new token", err)
+		return "", errHTTPRequest
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		s.Log.Error("Token request failed with status", fmt.Errorf("status: %d", res.StatusCode))
+		return "", errSpotifyNoToken
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		s.Log.Error("Error reading token response body", err)
+		return "", errResponseParsing
+	}
+
+	var t SpotifyTokenResponse
+	if err = json.Unmarshal(body, &t); err != nil {
+		s.Log.Error("Error unmarshalling token response", err)
+		return "", errResponseParsing
+	}
+
+	if t.AccessToken == "" {
+		s.Log.Error("Received empty access token", errSpotifyNoToken)
+		return "", errSpotifyNoToken
+	}
+
+	return t.AccessToken, nil
 }

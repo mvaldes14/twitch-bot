@@ -2,14 +2,6 @@ package spotify
 
 import "time"
 
-// SpotifyTokenResponse represents the response from Spotify token endpoint
-type SpotifyTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	Scope        string `json:"scope"`
-	RefreshToken string `json:"refresh_token"`
-}
-
 // SpotifyCurrentlyPlaying represents the currently playing track from Spotify
 type SpotifyCurrentlyPlaying struct {
 	Device struct {
