@@ -47,3 +47,11 @@ type TwitchValidResponse struct {
 	UserID    string   `json:"user_id"`
 	ExpiresIn int      `json:"expires_in"`
 }
+
+// SpotifyTokenResponse represents the response from Spotify token endpoint
+type SpotifyTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	Scope        string `json:"scope"`
+	RefreshToken string `json:"refresh_token"`
+}

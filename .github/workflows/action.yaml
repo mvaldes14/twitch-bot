@@ -7,6 +7,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      # - name: Run Gosec Security Scanner
+      #   uses: securego/gosec@master
+      #   with:
+      #     args: ./...
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

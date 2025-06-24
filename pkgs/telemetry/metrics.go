@@ -38,8 +38,14 @@ var (
 		Help:    "Duration of streams in seconds",
 		Buckets: prometheus.ExponentialBuckets(300, 2, 10), // 5min to ~85 hours
 	})
+	// SpotifySongChanged counts the number of times the Spotify song changes
 	SpotifySongChanged = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "spotify_song_changed_count",
 		Help: "Number of times the Spotify song changed",
+	})
+	// ChatMessageCount counts the number of chat messages per stream
+	ChatMessageCount = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "chat_message_count",
+		Help: "Number of chat messages per stream",
 	})
 )

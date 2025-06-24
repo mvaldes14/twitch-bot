@@ -14,3 +14,8 @@ tasks:
         curl -H 'Authorization: {{.ADMIN_TOKEN}}' \
         -H "Content-Type: application/json" \
         http://localhost:3000/api/list
+
+  check:
+    description: "Runs go sec"
+    cmds:
+      - gosec .
