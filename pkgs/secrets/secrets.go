@@ -65,23 +65,11 @@ func NewSecretService() *SecretService {
 }
 
 // InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
-func (s *SecretService) InitSecrets() error {
+func (s *SecretService) InitSecrets() {
 	twitchUToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
 	if err == nil {
 		os.Setenv("TWITCH_USER_TOKEN", twitchUToken)
-	}
-
-	twitchAToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
-	if err == nil {
-		os.Setenv("TWITCH_APP_TOKEN", twitchAToken)
-	}
-
-	spotifyToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
-	if err == nil {
-		os.Setenv("SPOTIFY_TOKEN", spotifyToken)
-	}
-	switch {
-	case twitchUToken == "":
+	} else {
 		twitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
 			fmt.Println(err)
@@ -91,7 +79,12 @@ func (s *SecretService) InitSecrets() error {
 			Value:      twitchUserToken,
 			Expiration: time.Duration(twitchUserExpiration) * time.Second,
 		})
-	case twitchAToken == "":
+	}
+
+	twitchAToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
+	if err == nil {
+		os.Setenv("TWITCH_APP_TOKEN", twitchAToken)
+	} else {
 		twitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
 			fmt.Println(err)
@@ -101,7 +94,12 @@ func (s *SecretService) InitSecrets() error {
 			Value:      twitchAppToken,
 			Expiration: time.Duration(twitchAppExpiration) * time.Second,
 		})
-	case spotifyToken == "":
+	}
+
+	spotifyToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
+	if err == nil {
+		os.Setenv("SPOTIFY_TOKEN", spotifyToken)
+	} else {
 		spotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
 			fmt.Println(err)
@@ -112,7 +110,6 @@ func (s *SecretService) InitSecrets() error {
 			Expiration: time.Duration(spotifyExpiration) * time.Second,
 		})
 	}
-	return errFailedToInit
 }
 
 // BuildSecretHeaders Returns the secrets from env variables to build headers for requests
