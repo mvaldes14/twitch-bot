@@ -18,4 +18,4 @@ tasks:
   check:
     description: "Runs go sec"
     cmds:
-      - gosec .
+      - gosec ./...
