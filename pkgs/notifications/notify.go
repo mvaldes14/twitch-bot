@@ -20,7 +20,6 @@ const (
 var (
 	errMessageDiscord = errors.New("Error sending message to discord")
 	errMessageGotify  = errors.New("Error sending message to gotify")
-	errMissingToken   = errors.New("Missing gotify application token")
 )
 
 // Discord struct to hold the logger
