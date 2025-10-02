@@ -13,7 +13,7 @@ import (
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
-	"github.com/mvaldes14/twitch-bot/pkgs/discord"
+	"github.com/mvaldes14/twitch-bot/pkgs/notifications"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
@@ -53,7 +53,7 @@ type Router struct {
 	Actions         *actions.Actions
 	Spotify         *spotify.Spotify
 	Log             *telemetry.CustomLogger
-	Discord         *discord.Discord
+	Notification    *notifications.NotificationService
 	streamStartTime time.Time
 	Cache           *cache.Service
 }
@@ -68,17 +68,17 @@ type SubscriptionTypeRequest struct {
 func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
 	actions := actions.NewActions(secretService)
 	spotify := spotify.NewSpotify()
-	discord := discord.NewDiscord()
+	notify := notifications.NewNotificationService()
 	logger := telemetry.NewLogger("router")
 	cache := cache.NewCacheService()
 	return &Router{
-		Log:     logger,
-		Subs:    subs,
-		Secrets: secretService,
-		Actions: actions,
-		Spotify: spotify,
-		Discord: discord,
-		Cache:   cache,
+		Log:          logger,
+		Subs:         subs,
+		Secrets:      secretService,
+		Actions:      actions,
+		Spotify:      spotify,
+		Notification: notify,
+		Cache:        cache,
 	}
 }
 
@@ -309,15 +309,16 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Testing")
-	rt.Actions.SendMessage("Test")
-	rt.Spotify.NextSong()
+	// rt.Actions.SendMessage("Test")
+	rt.Notification.SendNotification("Test Message from Twitch Bot")
+	// rt.Spotify.NextSong()
 }
 
 // StreamOnlineHandler sends a message to discord
 func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.streamStartTime = time.Now()
-	telemetry.StreamDuration.Observe(0)
-	err := rt.Discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
+	telemetry.StreamDuration.SetToCurrentTime()
+	err := rt.Notification.SendNotification("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
 		rt.Log.Error("Sending message to discord", err)
 	}
@@ -332,7 +333,7 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
 		rt.Log.Error("Could not send request to webhook for X post", err)
 	}
 	if resp.StatusCode == 200 {
-		rt.Log.Info("Posting message to X")
+		rt.Log.Info("Executing Notification Workflows")
 	}
 }
 
@@ -340,7 +341,7 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
 func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, _ *http.Request) {
 	if !rt.streamStartTime.IsZero() {
 		duration := time.Since(rt.streamStartTime).Seconds()
-		telemetry.StreamDuration.Observe(duration)
+		telemetry.StreamDuration.Set(duration)
 		rt.Log.Info("Stream ended", "duration", duration)
 		rt.streamStartTime = time.Time{} // Reset
 	}

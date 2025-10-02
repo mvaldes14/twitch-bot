@@ -1,0 +1,93 @@
+// Package notifications interacts with discord/gotify api to send messages to a channel
+package notifications
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"mime/multipart"
+	"net/http"
+	"os"
+
+	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+)
+
+const (
+	discordWebhookURL = "DISCORD_WEBHOOK"
+	gotifyURL         = "https://gotify.mvaldes.dev/message"
+	gotifyAppToken    = "GOTIFY_APPLICATION_TOKEN"
+)
+
+var (
+	errMessageDiscord = errors.New("Error sending message to discord")
+	errMessageGotify  = errors.New("Error sending message to gotify")
+)
+
+// NotificationService struct to hold the properties
+type NotificationService struct {
+	Log    telemetry.CustomLogger
+	Client http.Client
+}
+
+// NewNotificationService returns a new instance of NotificationService
+func NewNotificationService() *NotificationService {
+	logger := *telemetry.NewLogger("discord")
+	client := &http.Client{}
+	return &NotificationService{
+		Log:    logger,
+		Client: *client,
+	}
+}
+
+// SendNotification sends a message to a discord channel
+func (n *NotificationService) SendNotification(msg string) error {
+	n.Log.Info("Sending message to discord")
+	url := os.Getenv(discordWebhookURL)
+	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		n.Log.Error("Failed to generate payload for discord", err)
+		return err
+	}
+
+	resp, err := n.Client.Do(req)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		n.Log.Error("ERROR", errMessageDiscord)
+		// return errMessageDiscord
+	}
+
+	n.Log.Info("Sending message to gotify")
+	token := os.Getenv(gotifyAppToken)
+	if token == "" {
+		n.Log.Error("Gotify token not set", errMessageGotify)
+	}
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	w.WriteField("title", "Twitch Bot Notification")
+	w.WriteField("message", msg)
+	w.Close()
+
+	req, err = http.NewRequest("POST", fmt.Sprintf("%s?token=%s", gotifyURL, token), &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	if err != nil {
+		return err
+	}
+	resp, err = n.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		n.Log.Error("Error sending message to gotify", errMessageGotify)
+		return errMessageGotify
+	}
+	n.Log.Info("Sent message to gotify with status code", resp.StatusCode)
+	return nil
+}

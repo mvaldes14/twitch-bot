@@ -33,10 +33,9 @@ var (
 		Help: "Number of API calls",
 	})
 	// StreamDuration tracks how long streams last
-	StreamDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "stream_duration_seconds",
-		Help:    "Duration of streams in seconds",
-		Buckets: prometheus.ExponentialBuckets(300, 2, 10), // 5min to ~85 hours
+	StreamDuration = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "stream_duration_seconds",
+		Help: "Duration of streams in seconds",
 	})
 	// SpotifySongChanged counts the number of times the Spotify song changes
 	SpotifySongChanged = promauto.NewCounter(prometheus.CounterOpts{

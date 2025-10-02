@@ -8,8 +8,9 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
+const port = ":3000"
+
 func main() {
-	const port = ":3000"
 	logger := telemetry.NewLogger("main")
 	s := secrets.NewSecretService()
 	s.InitSecrets()
