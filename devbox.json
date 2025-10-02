@@ -7,7 +7,8 @@
     "revive@latest",
     "prettierd@latest",
     "gosec@latest",
-    "go@latest"
+    "go@latest",
+    "air@latest"
   ],
   "shell": {
     "init_hook": [

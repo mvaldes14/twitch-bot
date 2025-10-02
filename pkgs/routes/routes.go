@@ -53,8 +53,7 @@ type Router struct {
 	Actions         *actions.Actions
 	Spotify         *spotify.Spotify
 	Log             *telemetry.CustomLogger
-	Discord         *notifications.Discord
-	Gotify          *notifications.Gotify
+	Notification    *notifications.NotificationService
 	streamStartTime time.Time
 	Cache           *cache.Service
 }
@@ -69,19 +68,17 @@ type SubscriptionTypeRequest struct {
 func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
 	actions := actions.NewActions(secretService)
 	spotify := spotify.NewSpotify()
-	discord := notifications.NewDiscord()
-	gotify := notifications.NewGotify()
+	notify := notifications.NewNotificationService()
 	logger := telemetry.NewLogger("router")
 	cache := cache.NewCacheService()
 	return &Router{
-		Log:     logger,
-		Subs:    subs,
-		Secrets: secretService,
-		Actions: actions,
-		Spotify: spotify,
-		Discord: discord,
-		Gotify:  gotify,
-		Cache:   cache,
+		Log:          logger,
+		Subs:         subs,
+		Secrets:      secretService,
+		Actions:      actions,
+		Spotify:      spotify,
+		Notification: notify,
+		Cache:        cache,
 	}
 }
 
@@ -242,7 +239,6 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 // FollowHandler responds to follow events
 func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 	telemetry.FollowCount.Inc()
-	rt.Gotify.NotifyGotify("Nuevo follow en el canal!")
 	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -313,15 +309,16 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Testing")
-	rt.Actions.SendMessage("Test")
-	rt.Spotify.NextSong()
+	// rt.Actions.SendMessage("Test")
+	rt.Notification.SendNotification("Test Message from Twitch Bot")
+	// rt.Spotify.NextSong()
 }
 
 // StreamOnlineHandler sends a message to discord
 func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.streamStartTime = time.Now()
 	telemetry.StreamDuration.SetToCurrentTime()
-	err := rt.Discord.NotifyChannel("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
+	err := rt.Notification.SendNotification("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
 		rt.Log.Error("Sending message to discord", err)
 	}

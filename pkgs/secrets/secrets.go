@@ -72,7 +72,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		twitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
-			fmt.Println(err)
+			s.Log.Error("ERROR:", err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_USER_TOKEN",
@@ -87,7 +87,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		twitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
-			fmt.Println(err)
+			s.Log.Error("ERROR:", err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_APP_TOKEN",
@@ -102,7 +102,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		spotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
-			fmt.Println(err)
+			s.Log.Error("ERROR:", err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "SPOTIFY_TOKEN",
