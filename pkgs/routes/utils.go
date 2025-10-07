@@ -1,4 +1,4 @@
-// package routes handles all routes
+// Package routes handles all routes
 package routes
 
 import (
@@ -30,10 +30,10 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	rt.Log.Info("Sending request to Twitch API")
+	rt.Logger.Info("Sending request to Twitch API")
 	resp, err := client.Do(req)
 	if err != nil {
-		rt.Log.Error("Error sending request to Twitch:", err)
+		rt.Logger.Error(err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -43,7 +43,7 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 
 // GeneratePayload Builds the payload for each subscription type
 func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string {
-	rt.Log.Info("Generating payload for subscription type")
+	rt.Logger.Info("Generating payload for subscription type")
 
 	// Define the condition based on subscription type
 	condition := map[string]string{

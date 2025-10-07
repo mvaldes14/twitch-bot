@@ -12,9 +12,16 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
 
-// Service struct
-type Service struct {
-	Log *telemetry.CustomLogger
+// CacheService handles caching operations
+type CacheService struct {
+	Logger *telemetry.BotLogger
+}
+
+// Cache interface defines methods for token management
+type Cache interface {
+	GetToken(key string) (string, error)
+	StoreToken(tk Token) error
+	DeleteToken(key string) error
 }
 
 // Token represents a generic token structure
@@ -25,15 +32,14 @@ type Token struct {
 }
 
 var (
-	ctx                   = context.Background()
-	rdb                   *redis.Client
-	errorFailedConnection = errors.New("failed to connect to Redis")
-	errorNoToken          = errors.New("no token found for the given key")
-	cacheInstance         *Service
+	ctx           = context.Background()
+	rdb           *redis.Client
+	errorNoToken  = errors.New("no token found for the given key")
+	cacheInstance *CacheService
 )
 
 // NewCacheService initializes a new CacheService instance (singleton)
-func NewCacheService() *Service {
+func NewCacheService() *CacheService {
 	if cacheInstance != nil {
 		return cacheInstance
 	}
@@ -48,49 +54,49 @@ func NewCacheService() *Service {
 		panic("Could not connect to Redis: " + err.Error())
 	}
 	logger.Info("Connected to Redis successfully")
-	cacheInstance = &Service{Log: logger}
+	cacheInstance = &CacheService{Logger: logger}
 	return cacheInstance
 }
 
 // GetToken retrieves a token from Redis
-func (c *Service) GetToken(key string) (string, error) {
-	c.Log.Info("Retrieving token from Redis", key)
+func (c *CacheService) GetToken(key string) (string, error) {
+	c.Logger.Info("Retrieving token from Redis:" + key)
 	val, err := rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
-		c.Log.Error("Token not found in Redis", errorNoToken)
+		c.Logger.Error(errorNoToken)
 		return "", err
 	}
 	var token Token
 	if err := json.Unmarshal([]byte(val), &token); err != nil {
-		c.Log.Error("Failed to unmarshal token", err)
+		c.Logger.Error(err)
 		return "", err
 	}
 	return token.Value, nil
 }
 
 // StoreToken stores a key token in Redis
-func (c *Service) StoreToken(tk Token) error {
-	c.Log.Info("Storing token in Redis", tk.Key)
+func (c *CacheService) StoreToken(tk Token) error {
+	c.Logger.Info("Storing token in Redis: " + tk.Key)
 	jsonToken, err := json.Marshal(tk)
 	if err != nil {
-		c.Log.Error("Failed to marshal token", err)
+		c.Logger.Error(err)
 		return err
 	}
 	if err := rdb.Set(ctx, tk.Key, jsonToken, tk.Expiration).Err(); err != nil {
-		c.Log.Error("Failed to store token in Redis", err)
+		c.Logger.Error(err)
 		return err
 	}
-	c.Log.Info("Token stored successfully", tk.Key)
+	c.Logger.Info("Token stored successfully: " + tk.Key)
 	return nil
 }
 
 // DeleteToken removes a token from Redis
-func (c *Service) DeleteToken(key string) error {
-	c.Log.Info("Deleting token from Redis", key)
+func (c *CacheService) DeleteToken(key string) error {
+	c.Logger.Info("Deleting token from Redis: " + key)
 	if err := rdb.Del(ctx, key).Err(); err != nil {
-		c.Log.Error("Failed to delete token from Redis", err)
+		c.Logger.Error(err)
 		return err
 	}
-	c.Log.Info("Token deleted successfully", key)
+	c.Logger.Info("Token deleted successfully: " + key)
 	return nil
 }

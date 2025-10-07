@@ -28,7 +28,6 @@ func NewServer(port string) *http.Server {
 	router.HandleFunc("/cheer", rs.CheerHandler)
 	router.HandleFunc("/reward", rs.RewardHandler)
 	router.HandleFunc("/stream-online", rs.StreamOnlineHandler)
-	router.HandleFunc("/stream-offline", rs.StreamOfflineHandler)
 	router.HandleFunc("/health", rs.HealthHandler)
 	router.HandleFunc("/playing", rs.PlayingHandler)
 	router.HandleFunc("/playlist", rs.PlaylistHandler)

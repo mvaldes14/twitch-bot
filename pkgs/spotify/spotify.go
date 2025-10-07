@@ -37,8 +37,9 @@ var (
 
 // Spotify struct for spotify
 type Spotify struct {
-	Log        *telemetry.CustomLogger
-	Cache      *cache.Service
+	Logger     *telemetry.BotLogger
+	Metrics    *telemetry.BotMetrics
+	Cache      *cache.CacheService
 	PlaylistID string
 	httpClient *http.Client
 }
@@ -47,12 +48,14 @@ type Spotify struct {
 func NewSpotify() *Spotify {
 	logger := telemetry.NewLogger("spotify")
 	cache := cache.NewCacheService()
+	metrics := telemetry.NewMetrics()
 	playlistID := os.Getenv("SPOTIFY_PLAYLIST_ID")
 	if playlistID == "" {
 		playlistID = defaultPlaylistID
 	}
 	return &Spotify{
-		Log:        logger,
+		Logger:     logger,
+		Metrics:    metrics,
 		Cache:      cache,
 		PlaylistID: playlistID,
 		httpClient: &http.Client{Timeout: requestTimeout},
@@ -62,7 +65,7 @@ func NewSpotify() *Spotify {
 // getValidToken returns a valid token, refreshing if necessary
 func (s *Spotify) getValidToken() (string, error) {
 	if cachedToken, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err == nil && cachedToken != "" {
-		s.Log.Info("Using cached token")
+		s.Logger.Info("Using cached token")
 		return cachedToken, nil
 	}
 	return "", errSpotifyNoToken
@@ -76,33 +79,31 @@ func (s *Spotify) NextSong() error {
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
 
-	telemetry.SpotifySongChanged.Inc()
-	s.Log.Info("Changing song")
+	s.Metrics.IncrementSpotifySongChanged()
+	s.Logger.Info("Changing song")
 
 	req, err := http.NewRequest("POST", nextURL, nil)
 	if err != nil {
-		s.Log.Error("Error Generating Request for next song", err)
+		s.Logger.Error(err)
 		return errInvalidRequest
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error Sending Request for next song", err)
+		s.Logger.Error(err)
 		return errHTTPRequest
 	}
 	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case http.StatusNoContent:
-		s.Log.Info("Song changed")
+		s.Logger.Info("Song changed")
 		return nil
 	case http.StatusUnauthorized:
-		s.Log.Info("Token unauthorized, clearing cache")
 		s.Cache.DeleteToken("SPOTIFY_TOKEN")
-		return fmt.Errorf("unauthorized: token may be expired")
+		return fmt.Errorf("Unauthorized: token may be expired")
 	default:
-		s.Log.Error("Unexpected response status", fmt.Errorf("status: %d", res.StatusCode))
 		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 }
@@ -118,14 +119,14 @@ func (s *Spotify) GetSong() (SpotifyCurrentlyPlaying, error) {
 
 	req, err := http.NewRequest("GET", currentURL, nil)
 	if err != nil {
-		s.Log.Error("Error Generating Request for get song", err)
+		s.Logger.Error(err)
 		return currentlyPlaying, errInvalidRequest
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error Sending Request for get song", err)
+		s.Logger.Error(err)
 		return currentlyPlaying, errHTTPRequest
 	}
 	defer res.Body.Close()
@@ -141,12 +142,12 @@ func (s *Spotify) GetSong() (SpotifyCurrentlyPlaying, error) {
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error("Error reading response body", err)
+		s.Logger.Error(err)
 		return currentlyPlaying, errResponseParsing
 	}
 
 	if err = json.Unmarshal(body, &currentlyPlaying); err != nil {
-		s.Log.Error("Error unmarshalling song response", err)
+		s.Logger.Error(err)
 		return currentlyPlaying, errResponseParsing
 	}
 
@@ -187,7 +188,7 @@ func (s *Spotify) AddToPlaylist(song string) error {
 	}
 
 	if !s.validateURL(song) {
-		s.Log.Error("Invalid URL", errInvalidURL)
+		s.Logger.Error(errInvalidURL)
 		return errInvalidURL
 	}
 
@@ -196,19 +197,19 @@ func (s *Spotify) AddToPlaylist(song string) error {
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
 
-	s.Log.Info("Valid URL", song)
+	s.Logger.Info("Valid URL: " + song)
 	addPlaylistURL := fmt.Sprintf("https://api.spotify.com/v1/playlists/%v/tracks", s.PlaylistID)
 
 	songID, err := s.parseSong(song)
 	if err != nil {
-		s.Log.Error("Error parsing song URL", err)
+		s.Logger.Error(err)
 		return fmt.Errorf("failed to parse song URL: %w", err)
 	}
 
 	body := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"]}", songID)
 	req, err := http.NewRequest("POST", addPlaylistURL, bytes.NewBuffer([]byte(body)))
 	if err != nil {
-		s.Log.Error("Cannot construct request with parameters given", err)
+		s.Logger.Error(err)
 		return errInvalidRequest
 	}
 
@@ -217,21 +218,21 @@ func (s *Spotify) AddToPlaylist(song string) error {
 
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error sending request to add to playlist", err)
+		s.Logger.Error(err)
 		return errHTTPRequest
 	}
 	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case http.StatusCreated, http.StatusOK:
-		s.Log.Info("Successfully added song to playlist")
+		s.Logger.Info("Successfully added song to playlist")
 		return nil
 	case http.StatusUnauthorized:
 		s.Cache.DeleteToken("SPOTIFY_TOKEN")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
 		body, _ := io.ReadAll(res.Body)
-		s.Log.Error("Unexpected response status", fmt.Errorf("status: %d, body: %s", res.StatusCode, string(body)))
+		s.Logger.Error(fmt.Errorf("status: %d, body: %s", res.StatusCode, string(body)))
 		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 }
@@ -249,7 +250,7 @@ func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 
 	req, err := http.NewRequest("GET", getPlaylistURL+s.PlaylistID+"/tracks", nil)
 	if err != nil {
-		s.Log.Error("Error Generating Request for get song playlist", err)
+		s.Logger.Error(err)
 		return nil, errInvalidRequest
 	}
 
@@ -258,7 +259,7 @@ func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error Sending Request for get song playlist", err)
+		s.Logger.Error(err)
 		return nil, errHTTPRequest
 	}
 	defer res.Body.Close()
@@ -274,13 +275,13 @@ func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error("Error parsing body from get song playlist", err)
+		s.Logger.Error(err)
 		return nil, errResponseParsing
 	}
 
 	var playlistResponse SpotifyPlaylistItemList
 	if err = json.Unmarshal(body, &playlistResponse); err != nil {
-		s.Log.Error("Error unmarshalling playlist response", err)
+		s.Logger.Error(err)
 		return nil, errResponseParsing
 	}
 
@@ -302,7 +303,7 @@ func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 
 	req, err := http.NewRequest("GET", getPlaylistURL+s.PlaylistID+"/tracks", nil)
 	if err != nil {
-		s.Log.Error("Error Generating Request for get song playlist", err)
+		s.Logger.Error(err)
 		return nil, errInvalidRequest
 	}
 
@@ -311,7 +312,7 @@ func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error Sending Request for get song playlist", err)
+		s.Logger.Error(err)
 		return nil, errHTTPRequest
 	}
 	defer res.Body.Close()
@@ -327,13 +328,13 @@ func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error("Error parsing body from get song playlist", err)
+		s.Logger.Error(err)
 		return nil, errResponseParsing
 	}
 
 	var playlistResponse SpotifyPlaylistItemList
 	if err = json.Unmarshal(body, &playlistResponse); err != nil {
-		s.Log.Error("Error unmarshalling playlist response", err)
+		s.Logger.Error(err)
 		return nil, errResponseParsing
 	}
 
@@ -359,7 +360,7 @@ func (s *Spotify) DeleteSongPlaylist() error {
 	}
 
 	if len(songs) == 0 {
-		s.Log.Info("Playlist is already empty")
+		s.Logger.Info("Playlist is already empty")
 		return nil
 	}
 
@@ -368,7 +369,7 @@ func (s *Spotify) DeleteSongPlaylist() error {
 
 	req, err := http.NewRequest("DELETE", deletePlaylistURL+s.PlaylistID+"/tracks", bytes.NewBuffer([]byte(body)))
 	if err != nil {
-		s.Log.Error("Error Generating Request for delete playlist", err)
+		s.Logger.Error(err)
 		return errInvalidRequest
 	}
 
@@ -377,21 +378,21 @@ func (s *Spotify) DeleteSongPlaylist() error {
 
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error Sending Request for delete playlist", err)
+		s.Logger.Error(err)
 		return errHTTPRequest
 	}
 	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		s.Log.Info("Successfully cleared playlist")
+		s.Logger.Info("Successfully cleared playlist")
 		return nil
 	case http.StatusUnauthorized:
 		s.Cache.DeleteToken("SPOTIFY_TOKEN")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
 		body, _ := io.ReadAll(res.Body)
-		s.Log.Error("Unexpected response status", fmt.Errorf("status: %d, body: %s", res.StatusCode, string(body)))
+		s.Logger.Error(fmt.Errorf("status: %d, body: %s", res.StatusCode, string(body)))
 		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 }

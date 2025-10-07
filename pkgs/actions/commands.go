@@ -30,7 +30,7 @@ var (
 
 // Actions handles all Twitch chat actions and commands
 type Actions struct {
-	Log     *telemetry.CustomLogger
+	Logger  *telemetry.BotLogger
 	Secrets *secrets.SecretService
 	Spotify *spotify.Spotify
 }
@@ -39,7 +39,7 @@ type Actions struct {
 func NewActions(secrets *secrets.SecretService) *Actions {
 	logger := telemetry.NewLogger("actions")
 	return &Actions{
-		Log:     logger,
+		Logger:  logger,
 		Secrets: secrets,
 	}
 }
@@ -47,7 +47,7 @@ func NewActions(secrets *secrets.SecretService) *Actions {
 // ParseMessage Parses the incoming messages from stream
 func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	payload := fmt.Sprintf("%s: %s", msg.Event.ChatterUserName, msg.Event.Message.Text)
-	a.Log.Chat(payload)
+	a.Logger.Chat(payload)
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
@@ -69,7 +69,7 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!song":
 		song, err := a.Spotify.GetSong()
 		if err != nil {
-			a.Log.Error("Failed to get current song", err)
+			a.Logger.Error(err)
 			a.SendMessage("Sorry, couldn't get the current song")
 			return
 		}
@@ -78,12 +78,12 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 			return
 		}
 		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
-		a.Log.Info(msg)
+		a.Logger.Info(msg)
 		a.SendMessage(msg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
-		a.Log.Info("Today command running")
+		a.Logger.Info("Today command running")
 		a.updateChannel(msg)
 	}
 }
@@ -98,19 +98,19 @@ func (a *Actions) SendMessage(text string) error {
 
 	payload, err := json.Marshal(message)
 	if err != nil {
-		a.Log.Error("Failed to marshal message:", err)
+		a.Logger.Error(err)
 		return err
 	}
 
 	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
-		a.Log.Error("Failed to create request", err)
+		a.Logger.Error(err)
 		return err
 	}
 
 	headers, err := a.Secrets.BuildSecretHeaders()
 	if err != nil {
-		a.Log.Error("Failed to build headers to send message", err)
+		a.Logger.Error(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -119,13 +119,13 @@ func (a *Actions) SendMessage(text string) error {
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		a.Log.Error("failed to send message: %w", err)
+		a.Logger.Error(err)
 		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		a.Log.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
+		a.Logger.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
 		return err
 	}
 
@@ -133,7 +133,7 @@ func (a *Actions) SendMessage(text string) error {
 }
 
 func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
-	a.Log.Info("Changing the channel information")
+	a.Logger.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
 	if action.Event.BroadcasterUserID == userID {
 		// Build the new payload
@@ -145,18 +145,18 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
       "broadcaster_language":"es"}`,
 			softwareID, msg)
-		a.Log.Info("Today Command Ran")
+		a.Logger.Info("Today Command Ran")
 
 		// Send request to update channel information
 		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
-			a.Log.Error("Could not form request to update channel info", err)
+			a.Logger.Error(err)
 			return
 		}
 
 		headers, err := a.Secrets.BuildSecretHeaders()
 		if err != nil {
-			a.Log.Error("Failed to build headers to update channel", err)
+			a.Logger.Error(err)
 		}
 		userToken := os.Getenv("TWITCH_USER_TOKEN")
 		req.Header.Set("Content-Type", "application/json")
@@ -167,11 +167,11 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			client := &http.Client{}
 			res, err := client.Do(req)
 			if err != nil {
-				a.Log.Error("Request could not be sent to update channel", err)
+				a.Logger.Error(err)
 				return
 			}
 			if res.StatusCode != http.StatusBadRequest {
-				a.Log.Error("Received a bad messag ", errUpdateChannel)
+				a.Logger.Error(errUpdateChannel)
 			}
 			if res.StatusCode == http.StatusOK {
 				break

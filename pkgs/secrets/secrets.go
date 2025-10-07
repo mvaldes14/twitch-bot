@@ -51,8 +51,8 @@ var (
 
 // SecretService implements SecretManager interface
 type SecretService struct {
-	Log        *telemetry.CustomLogger
-	Cache      *cache.Service
+	Log        *telemetry.BotLogger
+	Cache      *cache.CacheService
 	httpClient *http.Client
 }
 
@@ -72,7 +72,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		twitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
-			s.Log.Error("ERROR:", err)
+			s.Log.Error(err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_USER_TOKEN",
@@ -87,7 +87,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		twitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
-			s.Log.Error("ERROR:", err)
+			s.Log.Error(err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_APP_TOKEN",
@@ -102,7 +102,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		spotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
-			s.Log.Error("ERROR:", err)
+			s.Log.Error(err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "SPOTIFY_TOKEN",
@@ -117,7 +117,7 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 	token := os.Getenv(twitchAppToken)
 	clientID := os.Getenv(twitchClientID)
 	if token == "" || clientID == "" {
-		s.Log.Error("Missing Twitch token or Client ID in environment", errMissingTokenOrID)
+		s.Log.Error(errMissingTokenOrID)
 		return RequestHeader{}, errMissingTokenOrID
 	}
 	return RequestHeader{
@@ -146,7 +146,7 @@ func (s *SecretService) GenerateUserToken() (string, error) {
 	}
 	var response TwitchUserTokenResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error("Failed to make request generating user token", err)
+		s.Log.Error(err)
 	}
 	return response.AccessToken, nil
 }
@@ -165,7 +165,7 @@ func (s *SecretService) RefreshAppToken() (string, error) {
 	}
 	var response TwitchRefreshResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error("Failed to make request refreshing token", err)
+		s.Log.Error(err)
 	}
 	return response.AccessToken, nil
 }
@@ -180,10 +180,10 @@ func (s *SecretService) ValidateToken(token string) bool {
 		Payload: "",
 	}
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error("Failed to make request refreshing token", err)
+		s.Log.Error(err)
 	}
 	if response.ExpiresIn > 0 {
-		s.Log.Info("Token is valid, expires in: ", response.ExpiresIn)
+		s.Log.Info(fmt.Sprintf("Token is valid, expires in: %v ", response.ExpiresIn))
 		return false
 	}
 	return true
@@ -198,7 +198,7 @@ func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) err
 	for k, v := range req.Headers {
 		httpReq.Header.Set(k, v)
 	}
-	s.Log.Info("Sending request to:", req.URL)
+	s.Log.Info(fmt.Sprintf("Sending request to: %v", req.URL))
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		return err
@@ -218,7 +218,7 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	clientSecret := os.Getenv(spotifyClientSecret)
 
 	if refreshToken == "" || clientID == "" || clientSecret == "" {
-		s.Log.Error("Missing Spotify credentials in environment", errSpotifyMissingSecrets)
+		s.Log.Error(errSpotifyMissingSecrets)
 		return "", errSpotifyMissingSecrets
 	}
 
@@ -229,7 +229,7 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 
 	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		s.Log.Error("Error forming request for GetSpotifyToken", err)
+		s.Log.Error(err)
 		return "", errInvalidRequest
 	}
 
@@ -239,30 +239,30 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	s.Log.Info("Requesting New Spotify token")
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		s.Log.Error("Error sending request to get new token", err)
+		s.Log.Error(err)
 		return "", errHTTPRequest
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		s.Log.Error("Token request failed with status", fmt.Errorf("status: %d", res.StatusCode))
+		s.Log.Error(errSpotifyNoToken)
 		return "", errSpotifyNoToken
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error("Error reading token response body", err)
+		s.Log.Error(err)
 		return "", errResponseParsing
 	}
 
 	var t SpotifyTokenResponse
 	if err = json.Unmarshal(body, &t); err != nil {
-		s.Log.Error("Error unmarshalling token response", err)
+		s.Log.Error(err)
 		return "", errResponseParsing
 	}
 
 	if t.AccessToken == "" {
-		s.Log.Error("Received empty access token", errSpotifyNoToken)
+		s.Log.Error(errSpotifyNoToken)
 		return "", errSpotifyNoToken
 	}
 

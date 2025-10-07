@@ -29,8 +29,8 @@ var (
 // Subscription is the struct that handles all subscriptions
 type Subscription struct {
 	Secrets *secrets.SecretService
-	Log     *telemetry.CustomLogger
-	Cache   *cache.Service
+	Logger  *telemetry.BotLogger
+	Cache   *cache.CacheService
 }
 
 // NewSubscription creates a new subscription
@@ -39,7 +39,7 @@ func NewSubscription(secretService *secrets.SecretService) *Subscription {
 	cache := cache.NewCacheService()
 	return &Subscription{
 		Secrets: secretService,
-		Log:     log,
+		Logger:  log,
 		Cache:   cache,
 	}
 }
@@ -54,7 +54,7 @@ func (s *Subscription) CreateSubscription(payload string) error {
 	// Add key headers to request
 	headers, err := s.Secrets.BuildSecretHeaders()
 	if err != nil {
-		s.Log.Error("Error getting headers for CreateSubscription", err)
+		s.Logger.Error(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -62,14 +62,14 @@ func (s *Subscription) CreateSubscription(payload string) error {
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	s.Log.Info("Sending request for subscription for:" + payload)
+	s.Logger.Info("Sending request for subscription for:" + payload)
 	resp, err := client.Do(req)
 	if err != nil {
-		s.Log.Error("Error sending request for new subscription", err)
+		s.Logger.Error(err)
 		return nil
 	}
 	defer resp.Body.Close()
-	s.Log.Info("Subscription created for: " + payload)
+	s.Logger.Info("Subscription created for: " + payload)
 	return errFailedSubscriptionCreation
 }
 
@@ -101,7 +101,7 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	var subscriptionList ValidateSubscription
 	err = json.Unmarshal(body, &subscriptionList)
 	if err != nil {
-		s.Log.Error("Error unmarshalling response:", err)
+		s.Logger.Error(err)
 	}
 	return subscriptionList, nil
 }
@@ -117,21 +117,21 @@ func (s *Subscription) DeleteSubscriptions(subs ValidateSubscription) error {
 			}
 			headers, err := s.Secrets.BuildSecretHeaders()
 			if err != nil {
-				s.Log.Error("Error getting headers for DeleteSubscriptions", err)
+				s.Logger.Error(err)
 			}
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+headers.Token)
 			req.Header.Set("Client-Id", headers.ClientID)
-			s.Log.Info("Deleting subscription:" + sub.ID)
+			s.Logger.Info("Deleting subscription:" + sub.ID)
 			client := &http.Client{}
 			resp, _ := client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
-				s.Log.Info("Subscription deleted:" + sub.ID)
+				s.Logger.Info("Subscription deleted:" + sub.ID)
 			}
 			return errFailedSubscriptionDeletion
 		}
 	} else {
-		s.Log.Info("No subscriptions to delete")
+		s.Logger.Info("No subscriptions to delete")
 	}
 	return nil
 }

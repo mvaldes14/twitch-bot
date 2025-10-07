@@ -8,66 +8,60 @@ import (
 	"time"
 )
 
-// CustomLogger is a custom logger that gets a prefix from the package it was called from
-type CustomLogger struct {
-	module string
-	output io.Writer
+// Logger interface for logging
+type Logger interface {
+	Log(module string, msg string) io.Writer
+	Error(module string, err error) io.Writer
+	Chat(module string, msg string) io.Writer
 }
 
-type logInfoMessage struct {
-	Timestamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	Message   any    `json:"message"`
-	Module    string `json:"module"`
-}
-
-type logErrorMessage struct {
-	Timestamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	Message   any    `json:"message"`
-	Module    string `json:"module"`
-	Error     string `json:"error"`
+// BotLogger implements Logger interface
+type BotLogger struct {
+	Timestamp string    `json:"timestamp"`
+	Level     string    `json:"level"`
+	Module    string    `json:"module"`
+	Message   any       `json:"message"`
+	Output    io.Writer `json:"-"`
 }
 
 // NewLogger Returns a logger in json for the bot
-func NewLogger(module string) *CustomLogger {
+func NewLogger(module string) *BotLogger {
 	output := io.Writer(os.Stdout)
-	return &CustomLogger{module, output}
+	return &BotLogger{Module: module, Output: output}
 }
 
 // Info logs an info message
-func (l CustomLogger) Info(msg ...any) {
+func (b BotLogger) Info(msg string) {
 	timestamp := time.Now().Format(time.RFC3339)
-	event := logInfoMessage{
+	event := BotLogger{
 		Timestamp: timestamp,
 		Level:     "info",
 		Message:   msg,
-		Module:    l.module,
+		Module:    b.Module,
 	}
-	json.NewEncoder(l.output).Encode(event)
+	json.NewEncoder(b.Output).Encode(event)
 }
 
 // Info logs an error message
-func (l CustomLogger) Error(msg string, e error) {
+func (b BotLogger) Error(msg error) {
 	timestamp := time.Now().Format(time.RFC3339)
-	event := logErrorMessage{
+	event := BotLogger{
 		Timestamp: timestamp,
 		Level:     "error",
 		Message:   msg,
-		Module:    l.module,
-		Error:     e.Error(),
+		Module:    b.Module,
 	}
-	json.NewEncoder(l.output).Encode(event)
+	json.NewEncoder(b.Output).Encode(event)
 }
 
-// Info logs an info message
-func (l CustomLogger) Chat(msg string) {
+// Chat logs what chat says
+func (b BotLogger) Chat(msg string) {
 	timestamp := time.Now().Format(time.RFC3339)
-	event := logErrorMessage{
+	event := BotLogger{
 		Timestamp: timestamp,
 		Level:     "chat",
 		Message:   msg,
-		Module:    l.module,
+		Module:    b.Module,
 	}
-	json.NewEncoder(l.output).Encode(event)
+	json.NewEncoder(b.Output).Encode(event)
 }

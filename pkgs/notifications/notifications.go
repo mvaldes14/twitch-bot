@@ -25,7 +25,7 @@ var (
 
 // NotificationService struct to hold the properties
 type NotificationService struct {
-	Log    telemetry.CustomLogger
+	Logger telemetry.BotLogger
 	Client http.Client
 }
 
@@ -34,20 +34,20 @@ func NewNotificationService() *NotificationService {
 	logger := *telemetry.NewLogger("discord")
 	client := &http.Client{}
 	return &NotificationService{
-		Log:    logger,
+		Logger: logger,
 		Client: *client,
 	}
 }
 
 // SendNotification sends a message to a discord channel
 func (n *NotificationService) SendNotification(msg string) error {
-	n.Log.Info("Sending message to discord")
+	n.Logger.Info("Sending message to discord")
 	url := os.Getenv(discordWebhookURL)
 	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		n.Log.Error("Failed to generate payload for discord", err)
+		n.Logger.Error(err)
 		return err
 	}
 
@@ -59,14 +59,14 @@ func (n *NotificationService) SendNotification(msg string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		n.Log.Error("ERROR", errMessageDiscord)
+		n.Logger.Error(errMessageDiscord)
 		// return errMessageDiscord
 	}
 
-	n.Log.Info("Sending message to gotify")
+	n.Logger.Info("Sending message to gotify")
 	token := os.Getenv(gotifyAppToken)
 	if token == "" {
-		n.Log.Error("Gotify token not set", errMessageGotify)
+		n.Logger.Error(errMessageGotify)
 	}
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
@@ -85,9 +85,9 @@ func (n *NotificationService) SendNotification(msg string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		n.Log.Error("Error sending message to gotify", errMessageGotify)
+		n.Logger.Error(errMessageGotify)
 		return errMessageGotify
 	}
-	n.Log.Info("Sent message to gotify with status code", resp.StatusCode)
+	n.Logger.Info("Sent message to gotify with status code: " + string(resp.StatusCode))
 	return nil
 }
