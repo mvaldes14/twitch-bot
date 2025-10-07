@@ -13,10 +13,8 @@ import (
 )
 
 const (
-	tokenURL          = "https://accounts.spotify.com/api/token"
-	nextURL           = "https://api.spotify.com/v1/me/player/next"              // POST
-	currentURL        = "https://api.spotify.com/v1/me/player/currently-playing" // GET
-	defaultPlaylistID = "72Cwey4JPR3DV3cdUS72xG"
+	nextURL    = "https://api.spotify.com/v1/me/player/next"              // POST
+	currentURL = "https://api.spotify.com/v1/me/player/currently-playing" // GET
 )
 
 // TODO: Think of all the possible errors we can throw based on the service
@@ -45,9 +43,9 @@ func NewSpotify() *Spotify {
 
 // getValidToken returns a valid token, refreshing if necessary
 func (s *Spotify) getValidToken() (string, error) {
-	if cachedToken, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err == nil && cachedToken != "" {
+	if cachedToken, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err == nil && cachedToken.Value != "" {
 		s.Service.Logger.Info("Using cached token")
-		return cachedToken, nil
+		return cachedToken.Value, nil
 	}
 	return "", errSpotifyNoToken
 
@@ -89,7 +87,7 @@ func (s *Spotify) NextSong() error {
 	}
 }
 
-// GetSong returns the current song playing via chat
+// GetCurrentSong returns the current song playing via chat
 func (s *Spotify) GetCurrentSong() (SpotifyCurrentlyPlaying, error) {
 	var currentlyPlaying SpotifyCurrentlyPlaying
 

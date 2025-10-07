@@ -27,7 +27,6 @@ const (
 	spotifyRefreshToken  = "SPOTIFY_REFRESH_TOKEN"
 	spotifyClientID      = "SPOTIFY_CLIENT_ID"
 	spotifyClientSecret  = "SPOTIFY_CLIENT_SECRET"
-	requestTimeout       = 30 * time.Second
 	twitchUserExpiration = 5259487
 	twitchAppExpiration  = 14400
 	spotifyExpiration    = 3600
@@ -44,7 +43,6 @@ var (
 	errFailedToInit          = errors.New("Failed to initialize secrets, check environment variables")
 	errSpotifyMissingSecrets = errors.New("Missing credentials from environment")
 	errSpotifyNoToken        = errors.New("Failed to produce a new token")
-	errInvalidURL            = errors.New("Invalid URL to add to Spotify Playlist")
 	errInvalidRequest        = errors.New("Failed to create HTTP request")
 	errHTTPRequest           = errors.New("HTTP request failed")
 	errResponseParsing       = errors.New("Failed to parse response")
@@ -72,10 +70,10 @@ func NewSecretService() *SecretService {
 }
 
 // InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
-func (s *SecretService) InitSecrets() {
-	twitchUToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
+func (s *SecretService) InitSecrets() error {
+	twitchUserToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
 	if err == nil {
-		os.Setenv("TWITCH_USER_TOKEN", twitchUToken)
+		os.Setenv("TWITCH_USER_TOKEN", twitchUserToken.Value)
 	} else {
 		twitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
@@ -88,9 +86,9 @@ func (s *SecretService) InitSecrets() {
 		})
 	}
 
-	twitchAToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
+	twitchAppToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
 	if err == nil {
-		os.Setenv("TWITCH_APP_TOKEN", twitchAToken)
+		os.Setenv("TWITCH_APP_TOKEN", twitchAppToken.Value)
 	} else {
 		twitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
@@ -105,7 +103,7 @@ func (s *SecretService) InitSecrets() {
 
 	spotifyToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
 	if err == nil {
-		os.Setenv("SPOTIFY_TOKEN", spotifyToken)
+		os.Setenv("SPOTIFY_TOKEN", spotifyToken.Value)
 	} else {
 		spotifyToken, err := s.GetSpotifyToken()
 		if err != nil {

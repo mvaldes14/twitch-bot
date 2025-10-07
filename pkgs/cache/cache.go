@@ -33,10 +33,11 @@ type Token struct {
 
 // TODO: Think of all the possible errors we can throw based on the service
 var (
-	ctx           = context.Background()
-	rdb           *redis.Client
-	errorNoToken  = errors.New("no token found for the given key")
-	cacheInstance *CacheService
+	ctx                    = context.Background()
+	rdb                    *redis.Client
+	errorNoToken           = errors.New("Could not find the token")
+	errorNoRedisConnection = errors.New("Could not connect to redis")
+	cacheInstance          *CacheService
 )
 
 // NewCacheService initializes a new CacheService instance (singleton)
@@ -52,27 +53,26 @@ func NewCacheService() *CacheService {
 		Addr: redisURL,
 	})
 	if _, err := rdb.Ping(ctx).Result(); err != nil {
-		panic("Could not connect to Redis: " + err.Error())
+		panic(errorNoRedisConnection)
 	}
-	logger.Info("Connected to Redis successfully")
 	cacheInstance = &CacheService{Logger: logger}
 	return cacheInstance
 }
 
 // GetToken retrieves a token from Redis
-func (c *CacheService) GetToken(key string) (string, error) {
+func (c *CacheService) GetToken(key string) (Token, error) {
 	c.Logger.Info("Retrieving token from Redis:" + key)
+	var token Token
 	val, err := rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
 		c.Logger.Error(errorNoToken)
-		return "", err
+		return token, err
 	}
-	var token Token
 	if err := json.Unmarshal([]byte(val), &token); err != nil {
 		c.Logger.Error(err)
-		return "", err
+		return token, err
 	}
-	return token.Value, nil
+	return token, nil
 }
 
 // StoreToken stores a key token in Redis
