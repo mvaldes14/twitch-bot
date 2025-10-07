@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
-	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+	"github.com/mvaldes14/twitch-bot/pkgs/service"
 )
 
 const (
@@ -38,6 +38,7 @@ const (
 	tokenURL       = "https://accounts.spotify.com/api/token"
 )
 
+// TODO: Think of all the possible errors we can throw based on the service
 var (
 	errMissingTokenOrID      = errors.New("Token or Client ID not found in environment")
 	errFailedToInit          = errors.New("Failed to initialize secrets, check environment variables")
@@ -49,19 +50,25 @@ var (
 	errResponseParsing       = errors.New("Failed to parse response")
 )
 
+// Secret interface defines the methods to export and apply
+type Secret interface {
+	InitSecrets() error
+	GetTwitchAppToken() error
+	GetTwitchUserToken() error
+	GetSpotifyToken() error
+}
+
 // SecretService implements SecretManager interface
 type SecretService struct {
-	Log        *telemetry.BotLogger
-	Cache      *cache.CacheService
-	httpClient *http.Client
+	Service *service.Service
+	Cache   *cache.CacheService
 }
 
 // NewSecretService creates a new instance of SecretService
 func NewSecretService() *SecretService {
-	logger := telemetry.NewLogger("secrets")
 	cache := cache.NewCacheService()
-	httpClient := &http.Client{Timeout: requestTimeout}
-	return &SecretService{Log: logger, Cache: cache, httpClient: httpClient}
+	service := service.NewService("notifications")
+	return &SecretService{Service: service, Cache: cache}
 }
 
 // InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
@@ -72,7 +79,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		twitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
-			s.Log.Error(err)
+			s.Service.Logger.Error(err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_USER_TOKEN",
@@ -87,7 +94,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		twitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
-			s.Log.Error(err)
+			s.Service.Logger.Error(err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_APP_TOKEN",
@@ -102,7 +109,7 @@ func (s *SecretService) InitSecrets() {
 	} else {
 		spotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
-			s.Log.Error(err)
+			s.Service.Logger.Error(err)
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "SPOTIFY_TOKEN",
@@ -117,7 +124,7 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 	token := os.Getenv(twitchAppToken)
 	clientID := os.Getenv(twitchClientID)
 	if token == "" || clientID == "" {
-		s.Log.Error(errMissingTokenOrID)
+		s.Service.Logger.Error(errMissingTokenOrID)
 		return RequestHeader{}, errMissingTokenOrID
 	}
 	return RequestHeader{
@@ -128,7 +135,7 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 
 // GenerateUserToken acquires a new token that is valid for 2 months
 func (s *SecretService) GenerateUserToken() (string, error) {
-	s.Log.Info("Generating new twitch user token")
+	s.Service.Logger.Info("Generating new twitch user token")
 	twitchID := os.Getenv(twitchClientID)
 	twitchSecret := os.Getenv(twitchSecret)
 	if twitchID == "" || twitchSecret == "" {
@@ -146,7 +153,7 @@ func (s *SecretService) GenerateUserToken() (string, error) {
 	}
 	var response TwitchUserTokenResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 	}
 	return response.AccessToken, nil
 }
@@ -165,7 +172,7 @@ func (s *SecretService) RefreshAppToken() (string, error) {
 	}
 	var response TwitchRefreshResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 	}
 	return response.AccessToken, nil
 }
@@ -180,10 +187,10 @@ func (s *SecretService) ValidateToken(token string) bool {
 		Payload: "",
 	}
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 	}
 	if response.ExpiresIn > 0 {
-		s.Log.Info(fmt.Sprintf("Token is valid, expires in: %v ", response.ExpiresIn))
+		s.Service.Logger.Info(fmt.Sprintf("Token is valid, expires in: %v ", response.ExpiresIn))
 		return false
 	}
 	return true
@@ -198,8 +205,8 @@ func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) err
 	for k, v := range req.Headers {
 		httpReq.Header.Set(k, v)
 	}
-	s.Log.Info(fmt.Sprintf("Sending request to: %v", req.URL))
-	resp, err := s.httpClient.Do(httpReq)
+	s.Service.Logger.Info(fmt.Sprintf("Sending request to: %v", req.URL))
+	resp, err := s.Service.Client.Do(httpReq)
 	if err != nil {
 		return err
 	}
@@ -218,7 +225,7 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	clientSecret := os.Getenv(spotifyClientSecret)
 
 	if refreshToken == "" || clientID == "" || clientSecret == "" {
-		s.Log.Error(errSpotifyMissingSecrets)
+		s.Service.Logger.Error(errSpotifyMissingSecrets)
 		return "", errSpotifyMissingSecrets
 	}
 
@@ -229,40 +236,40 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 
 	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 		return "", errInvalidRequest
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Basic "+encodedToken)
 
-	s.Log.Info("Requesting New Spotify token")
-	res, err := s.httpClient.Do(req)
+	s.Service.Logger.Info("Requesting New Spotify token")
+	res, err := s.Service.Client.Do(req)
 	if err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 		return "", errHTTPRequest
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		s.Log.Error(errSpotifyNoToken)
+		s.Service.Logger.Error(errSpotifyNoToken)
 		return "", errSpotifyNoToken
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 		return "", errResponseParsing
 	}
 
 	var t SpotifyTokenResponse
 	if err = json.Unmarshal(body, &t); err != nil {
-		s.Log.Error(err)
+		s.Service.Logger.Error(err)
 		return "", errResponseParsing
 	}
 
 	if t.AccessToken == "" {
-		s.Log.Error(errSpotifyNoToken)
+		s.Service.Logger.Error(errSpotifyNoToken)
 		return "", errSpotifyNoToken
 	}
 

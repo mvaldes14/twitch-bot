@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+	"github.com/mvaldes14/twitch-bot/pkgs/service"
 )
 
 const (
@@ -18,6 +18,7 @@ const (
 	gotifyAppToken    = "GOTIFY_APPLICATION_TOKEN"
 )
 
+// TODO: Think of all the possible errors we can throw based on the service
 var (
 	errMessageDiscord = errors.New("Error sending message to discord")
 	errMessageGotify  = errors.New("Error sending message to gotify")
@@ -25,33 +26,28 @@ var (
 
 // NotificationService struct to hold the properties
 type NotificationService struct {
-	Logger telemetry.BotLogger
-	Client http.Client
+	Service *service.Service
 }
 
 // NewNotificationService returns a new instance of NotificationService
 func NewNotificationService() *NotificationService {
-	logger := *telemetry.NewLogger("discord")
-	client := &http.Client{}
-	return &NotificationService{
-		Logger: logger,
-		Client: *client,
-	}
+	service := service.NewService("notifications")
+	return &NotificationService{service}
 }
 
 // SendNotification sends a message to a discord channel
 func (n *NotificationService) SendNotification(msg string) error {
-	n.Logger.Info("Sending message to discord")
+	n.Service.Logger.Info("Sending message to discord")
 	url := os.Getenv(discordWebhookURL)
 	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		n.Logger.Error(err)
+		n.Service.Logger.Error(err)
 		return err
 	}
 
-	resp, err := n.Client.Do(req)
+	resp, err := n.Service.Client.Do(req)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -59,14 +55,14 @@ func (n *NotificationService) SendNotification(msg string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		n.Logger.Error(errMessageDiscord)
+		n.Service.Logger.Error(errMessageDiscord)
 		// return errMessageDiscord
 	}
 
-	n.Logger.Info("Sending message to gotify")
+	n.Service.Logger.Info("Sending message to gotify")
 	token := os.Getenv(gotifyAppToken)
 	if token == "" {
-		n.Logger.Error(errMessageGotify)
+		n.Service.Logger.Error(errMessageGotify)
 	}
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
@@ -79,15 +75,15 @@ func (n *NotificationService) SendNotification(msg string) error {
 	if err != nil {
 		return err
 	}
-	resp, err = n.Client.Do(req)
+	resp, err = n.Service.Client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		n.Logger.Error(errMessageGotify)
+		n.Service.Logger.Error(errMessageGotify)
 		return errMessageGotify
 	}
-	n.Logger.Info("Sent message to gotify with status code: " + string(resp.StatusCode))
+	n.Service.Logger.Info("Sent message to gotify with status code: " + string(resp.StatusCode))
 	return nil
 }

@@ -4,8 +4,10 @@ tasks:
   dev:
     description: "Runs the webserver"
     dir: '{{.USER_WORKING_DIR}}'
+    ignore_error: true
     cmds:
-      - go run .
+      - (kubectl port-forward -n db deployments/redis-deploy 6379:6379 &)
+      - air
 
   list:
     description: "Gets list of current subscriptions"

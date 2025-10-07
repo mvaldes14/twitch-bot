@@ -31,6 +31,7 @@ type Token struct {
 	Expiration time.Duration
 }
 
+// TODO: Think of all the possible errors we can throw based on the service
 var (
 	ctx           = context.Background()
 	rdb           *redis.Client
