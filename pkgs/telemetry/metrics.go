@@ -13,22 +13,26 @@ type Metrics interface {
 
 // BotMetrics implements Metrics interface
 type BotMetrics struct {
-	Name        string
-	Description string
+	metrics map[string]prometheus.Counter
 }
 
 // NewMetrics returns a new Metric Service
 func NewMetrics() *BotMetrics {
-	return &BotMetrics{}
+	return &BotMetrics{
+		metrics: make(map[string]prometheus.Counter),
+	}
 }
 
 // IncrementCount defines the default way to increment a counter in a prometheus metric
 func (b BotMetrics) IncrementCount(name, description string) {
-	incrementCounter := promauto.NewCounter(prometheus.CounterOpts{
-		Name: name,
-		Help: description,
-	})
-	incrementCounter.Inc()
+	if _, ok := b.metrics[name]; !ok {
+		incrementCounter := promauto.NewCounter(prometheus.CounterOpts{
+			Name: name,
+			Help: description,
+		})
+		b.metrics[name] = incrementCounter
+	}
+	b.metrics[name].Inc()
 }
 
 // Existing metric names to migrate

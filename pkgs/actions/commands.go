@@ -67,7 +67,7 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	case "!youtube":
 		a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
-		song, err := a.Spotify.GetSong()
+		song, err := a.Spotify.GetCurrentSong()
 		if err != nil {
 			a.Logger.Error(err)
 			a.SendMessage("Sorry, couldn't get the current song")

@@ -15,7 +15,6 @@ const (
 	userID      = "1792311"
 	callbackURL = "https://bots.mvaldes.dev"
 	secret      = "superSecret123"
-	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
 // MakeRequestMarshallJSON receives a request and marshals the response into a struct
@@ -30,10 +29,10 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 	// Create an HTTP client
 	client := &http.Client{}
 	// Send the request and get the response
-	rt.Logger.Info("Sending request to Twitch API")
+	rt.Service.Logger.Info("Sending request to Twitch API")
 	resp, err := client.Do(req)
 	if err != nil {
-		rt.Logger.Error(err)
+		rt.Service.Logger.Error(err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -43,7 +42,7 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 
 // GeneratePayload Builds the payload for each subscription type
 func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string {
-	rt.Logger.Info("Generating payload for subscription type")
+	rt.Service.Logger.Info("Generating payload for subscription type")
 
 	// Define the condition based on subscription type
 	condition := map[string]string{

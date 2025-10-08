@@ -22,6 +22,8 @@ const (
 var (
 	errMessageDiscord = errors.New("Error sending message to discord")
 	errMessageGotify  = errors.New("Error sending message to gotify")
+	errMissingDiscord = errors.New("Missing discord webhook URL in environment")
+	errMissingGotify  = errors.New("Missing gotify application token in environment")
 )
 
 // NotificationService struct to hold the properties
@@ -36,33 +38,33 @@ func NewNotificationService() *NotificationService {
 }
 
 // SendNotification sends a message to a discord channel
-func (n *NotificationService) SendNotification(msg string) error {
+func (n *NotificationService) SendNotification(msg string) {
 	n.Service.Logger.Info("Sending message to discord")
 	url := os.Getenv(discordWebhookURL)
+	if url == "" {
+		n.Service.Logger.Error(errMissingDiscord)
+	}
 	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		n.Service.Logger.Error(err)
-		return err
 	}
 
 	resp, err := n.Service.Client.Do(req)
 	if err != nil {
 		fmt.Println(err)
-		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		n.Service.Logger.Error(errMessageDiscord)
-		// return errMessageDiscord
 	}
 
 	n.Service.Logger.Info("Sending message to gotify")
 	token := os.Getenv(gotifyAppToken)
 	if token == "" {
-		n.Service.Logger.Error(errMessageGotify)
+		n.Service.Logger.Error(errMissingGotify)
 	}
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
@@ -73,17 +75,15 @@ func (n *NotificationService) SendNotification(msg string) error {
 	req, err = http.NewRequest("POST", fmt.Sprintf("%s?token=%s", gotifyURL, token), &body)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	if err != nil {
-		return err
+		n.Service.Logger.Error(err)
 	}
 	resp, err = n.Service.Client.Do(req)
 	if err != nil {
-		return err
+		n.Service.Logger.Error(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		n.Service.Logger.Error(errMessageGotify)
-		return errMessageGotify
 	}
 	n.Service.Logger.Info("Sent message to gotify with status code: " + string(resp.StatusCode))
-	return nil
 }

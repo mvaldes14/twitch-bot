@@ -70,7 +70,7 @@ func NewSecretService() *SecretService {
 }
 
 // InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
-func (s *SecretService) InitSecrets() error {
+func (s *SecretService) InitSecrets() {
 	twitchUserToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
 	if err == nil {
 		os.Setenv("TWITCH_USER_TOKEN", twitchUserToken.Value)

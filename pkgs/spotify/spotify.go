@@ -58,7 +58,7 @@ func (s *Spotify) NextSong() error {
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
 
-	s.Service.Metrics.IncrementCount("spotify_song_changed_count", "Number of times the Spotify song changed")
+	s.Service.Metrics.IncrementCount("bot_spotify_song_changed_count", "Number of times the Spotify song changed")
 	s.Service.Logger.Info("Changing song")
 
 	req, err := http.NewRequest("POST", nextURL, nil)

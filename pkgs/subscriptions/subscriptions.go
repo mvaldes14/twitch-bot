@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
@@ -76,11 +75,18 @@ func (s *Subscription) CreateSubscription(payload string) error {
 // GetSubscriptions Retrieves all subscriptions for the application
 func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	req, _ := http.NewRequest("GET", URL, nil)
-	token := os.Getenv("TWITCH_USER_TOKEN")
-	clientID := os.Getenv("TWITCH_CLIENT_ID")
+	token, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
+	if err != nil {
+		s.Service.Logger.Error(err)
+	}
+	clientID, err := s.Cache.GetToken("TWITCH_CLIENT_ID")
+	if err != nil {
+		s.Service.Logger.Error(err)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Client-Id", clientID)
+	req.Header.Set("Authorization", "Bearer "+token.Value)
+	req.Header.Set("Client-Id", clientID.Value)
 	resp, err := s.Service.Client.Do(req)
 	// if err != nil {
 	// 	s.Log.Error("Error sending request:", err)
@@ -97,6 +103,7 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	// 	}
 	// }
 	body, _ := io.ReadAll(resp.Body)
+	s.Service.Logger.Info("Response from Twitch: " + string(body))
 	var subscriptionList ValidateSubscription
 	err = json.Unmarshal(body, &subscriptionList)
 	if err != nil {
@@ -125,11 +132,11 @@ func (s *Subscription) DeleteSubscriptions(subs ValidateSubscription) error {
 			resp, _ := s.Service.Client.Do(req)
 			if resp.StatusCode == http.StatusNoContent {
 				s.Service.Logger.Info("Subscription deleted:" + sub.ID)
+			} else {
+				return errFailedSubscriptionDeletion
 			}
-			return errFailedSubscriptionDeletion
 		}
-	} else {
-		s.Service.Logger.Info("No subscriptions to delete")
 	}
+	s.Service.Logger.Info("No subscriptions to delete")
 	return nil
 }

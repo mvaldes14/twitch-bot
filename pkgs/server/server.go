@@ -22,19 +22,18 @@ func NewServer(port string) *http.Server {
 	api.HandleFunc("GET /test", rs.TestHandler)
 
 	router := http.NewServeMux()
-	router.HandleFunc("/follow", rs.FollowHandler)
-	router.HandleFunc("/chat", rs.ChatHandler)
-	router.HandleFunc("/sub", rs.SubHandler)
-	router.HandleFunc("/cheer", rs.CheerHandler)
-	router.HandleFunc("/reward", rs.RewardHandler)
-	router.HandleFunc("/stream-online", rs.StreamOnlineHandler)
-	router.HandleFunc("/health", rs.HealthHandler)
-	router.HandleFunc("/playing", rs.PlayingHandler)
-	router.HandleFunc("/playlist", rs.PlaylistHandler)
-	router.HandleFunc("/test", rs.TestHandler)
-	router.Handle("/metrics", promhttp.Handler())
+	router.HandleFunc("GET /follow", rs.FollowHandler)
+	router.HandleFunc("GET /chat", rs.ChatHandler)
+	router.HandleFunc("GET /sub", rs.SubHandler)
+	router.HandleFunc("GET /cheer", rs.CheerHandler)
+	router.HandleFunc("GET /reward", rs.RewardHandler)
+	router.HandleFunc("GET /stream-online", rs.StreamOnlineHandler)
+	router.HandleFunc("GET /health", rs.HealthHandler)
+	router.HandleFunc("GET /playing", rs.PlayingHandler)
+	router.HandleFunc("GET /test", rs.TestHandler)
+	router.Handle("GET /metrics", promhttp.Handler())
 
-	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
+	router.Handle("GET /api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
 
 	srv := &http.Server{
 		Addr:    port,
