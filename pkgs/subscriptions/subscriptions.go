@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
@@ -24,6 +25,7 @@ var (
 	errFailedSubscriptionCreation = errors.New("Failed to create new subscription")
 	errFailedSubscriptionDeletion = errors.New("Failed to delete subscription")
 	errFailedToFormRequest        = errors.New("Failed to form request")
+	errFailedTwitchClientID       = errors.New("Failed to get Twitch Client ID from environment")
 )
 
 // Subscription is the struct that handles all subscriptions
@@ -78,15 +80,16 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	token, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
 	if err != nil {
 		s.Service.Logger.Error(err)
+		return ValidateSubscription{}, err
 	}
-	clientID, err := s.Cache.GetToken("TWITCH_CLIENT_ID")
-	if err != nil {
-		s.Service.Logger.Error(err)
+	clientID := os.Getenv("TWITCH_CLIENT_ID")
+	if clientID == "" {
+		return ValidateSubscription{}, errFailedTwitchClientID
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token.Value)
-	req.Header.Set("Client-Id", clientID.Value)
+	req.Header.Set("Client-Id", clientID)
 	resp, err := s.Service.Client.Do(req)
 	// if err != nil {
 	// 	s.Log.Error("Error sending request:", err)
@@ -103,7 +106,6 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	// 	}
 	// }
 	body, _ := io.ReadAll(resp.Body)
-	s.Service.Logger.Info("Response from Twitch: " + string(body))
 	var subscriptionList ValidateSubscription
 	err = json.Unmarshal(body, &subscriptionList)
 	if err != nil {

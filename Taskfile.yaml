@@ -5,6 +5,8 @@ tasks:
     description: "Runs the webserver"
     dir: '{{.USER_WORKING_DIR}}'
     ignore_error: true
+    env:
+      ADMIN_TOKEN: test
     cmds:
       - (kubectl port-forward -n db deployments/redis-deploy 6379:6379 &)
       - air

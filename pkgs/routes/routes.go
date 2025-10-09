@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"text/template"
 	"time"
 
@@ -63,6 +64,11 @@ type SubscriptionTypeRequest struct {
 	createdAt time.Time
 }
 
+type subItem struct {
+	Status string `json:"status"`
+	Type   string `json:type`
+}
+
 // NewRouter creates a new router
 func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
 	actions := actions.NewActions(secretService)
@@ -103,6 +109,7 @@ func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 // MiddleWareRoute checks for headers in all requests
 func (rt *Router) MiddleWareRoute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rt.Service.Metrics.IncrementCount("bot_eventsub_count", "Number of EventSub calls")
 		if r.Header.Get("Twitch-Eventsub-Message-Type") == "webhook_callback_verification" {
 			rt.respondToChallenge(w, r)
 		} else {
@@ -143,13 +150,13 @@ func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
 
 // HealthHandler returns a healthy message
 func (rt *Router) HealthHandler(w http.ResponseWriter, _ *http.Request) {
-	json.NewEncoder(w).Encode("Healthy")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode("Ok")
 }
 
 // ListHandler returns the current subscription list
 func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList, err := rt.Subs.GetSubscriptions()
-	fmt.Println(subsList)
 	if err != nil {
 		rt.Service.Logger.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -158,12 +165,13 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 		rt.Service.Logger.Info("No subscriptions found")
 		return
 	}
-	rt.Service.Logger.Info("Current Subscription List: " + string(subsList.Total))
+	var subList = []subItem{}
+	rt.Service.Logger.Info("Current Subscription List: " + strconv.Itoa(subsList.Total))
+
 	for _, sub := range subsList.Data {
-		rt.Service.Logger.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
-		subItem := fmt.Sprintf("ID:%s, Status: %s, Type: %s\n", sub.ID, sub.Status, sub.Type)
-		json.NewEncoder(w).Encode(subItem)
+		subList = append(subList, subItem{Status: sub.Status, Type: sub.Type})
 	}
+	json.NewEncoder(w).Encode(subList)
 }
 
 // CreateHandler creates a subscription based on the parameter

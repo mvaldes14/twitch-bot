@@ -53,7 +53,7 @@ func (n *NotificationService) SendNotification(msg string) {
 
 	resp, err := n.Service.Client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		n.Service.Logger.Error(err)
 	}
 	defer resp.Body.Close()
 
