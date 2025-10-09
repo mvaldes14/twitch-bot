@@ -48,7 +48,7 @@ func (b BotLogger) Error(msg error) {
 	event := BotLogger{
 		Timestamp: timestamp,
 		Level:     "error",
-		Message:   msg,
+		Message:   msg.Error(),
 		Module:    b.Module,
 	}
 	json.NewEncoder(b.Output).Encode(event)

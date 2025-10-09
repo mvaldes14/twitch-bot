@@ -88,7 +88,6 @@ func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 		token := os.Getenv(adminToken)
 		if token == "" {
 			rt.Service.Logger.Error(errorTokenNotFound)
-			fmt.Println("Token not found")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
