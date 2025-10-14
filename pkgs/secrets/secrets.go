@@ -65,12 +65,12 @@ type SecretService struct {
 // NewSecretService creates a new instance of SecretService
 func NewSecretService() *SecretService {
 	cache := cache.NewCacheService()
-	service := service.NewService("notifications")
+	service := service.NewService("secrets")
 	return &SecretService{Service: service, Cache: cache}
 }
 
 // InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
-func (s *SecretService) InitSecrets() {
+func (s *SecretService) InitSecrets() error {
 	twitchUserToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
 	if err == nil {
 		os.Setenv("TWITCH_USER_TOKEN", twitchUserToken.Value)
@@ -78,6 +78,7 @@ func (s *SecretService) InitSecrets() {
 		twitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
 			s.Service.Logger.Error(err)
+			return errFailedToInit
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_USER_TOKEN",
@@ -93,6 +94,7 @@ func (s *SecretService) InitSecrets() {
 		twitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
 			s.Service.Logger.Error(err)
+			return errFailedToInit
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_APP_TOKEN",
@@ -108,6 +110,7 @@ func (s *SecretService) InitSecrets() {
 		spotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
 			s.Service.Logger.Error(err)
+			return errFailedToInit
 		}
 		s.Cache.StoreToken(cache.Token{
 			Key:        "SPOTIFY_TOKEN",
@@ -115,6 +118,7 @@ func (s *SecretService) InitSecrets() {
 			Expiration: time.Duration(spotifyExpiration) * time.Second,
 		})
 	}
+	return nil
 }
 
 // BuildSecretHeaders Returns the secrets from env variables to build headers for requests
