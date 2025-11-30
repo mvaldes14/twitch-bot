@@ -1,6 +1,8 @@
 // Package telemetry contains the logging and metrics
 package telemetry
 
+// TODO: Implement otel stuff her
+
 import (
 	"encoding/json"
 	"io"
