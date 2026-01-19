@@ -72,17 +72,23 @@ func (s *Spotify) getValidToken() (string, error) {
 
 // NextSong Changes the currently playing song
 func (s *Spotify) NextSong() error {
+	ctx := context.Background()
+	ctx, span := telemetry.StartExternalSpan(ctx, "spotify.next_song", "spotify", "next_song")
+	defer span.End()
+
 	token, err := s.getValidToken()
 	if err != nil {
+		telemetry.RecordError(span, err)
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
 
-	telemetry.IncrementSpotifySongChanged(context.Background())
+	telemetry.IncrementSpotifySongChanged(ctx)
 	s.Log.Info("Changing song")
 
-	req, err := http.NewRequest("POST", nextURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", nextURL, nil)
 	if err != nil {
 		s.Log.Error("Error Generating Request for next song", err)
+		telemetry.RecordError(span, err)
 		return errInvalidRequest
 	}
 
@@ -90,9 +96,12 @@ func (s *Spotify) NextSong() error {
 	res, err := s.httpClient.Do(req)
 	if err != nil {
 		s.Log.Error("Error Sending Request for next song", err)
+		telemetry.RecordError(span, err)
 		return errHTTPRequest
 	}
 	defer res.Body.Close()
+
+	telemetry.SetSpanStatus(span, res.StatusCode)
 
 	switch res.StatusCode {
 	case http.StatusNoContent:

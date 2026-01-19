@@ -37,7 +37,7 @@ func NewServer(port string) *http.Server {
 
 	srv := &http.Server{
 		Addr:    port,
-		Handler: rs.MiddleWareRoute(router),
+		Handler: rs.TracingMiddleware(rs.MiddleWareRoute(router)),
 	}
 	return srv
 }
