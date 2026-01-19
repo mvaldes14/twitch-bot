@@ -26,21 +26,15 @@ var (
 
 // OTELConfig holds configuration for OpenTelemetry
 type OTELConfig struct {
-	ServiceName      string
 	ServiceVersion   string
 	OTLPEndpoint     string
 	Environment      string
-	EnableTracing    bool
-	EnableMetrics    bool
 	InsecureEndpoint bool
 }
 
 // InitOTEL initializes the OpenTelemetry providers globally
 func InitOTEL(ctx context.Context, config OTELConfig) error {
 	// Set defaults if not provided
-	if config.ServiceName == "" {
-		config.ServiceName = "twitch-bot"
-	}
 	if config.ServiceVersion == "" {
 		config.ServiceVersion = "1.0.0"
 	}
@@ -51,7 +45,7 @@ func InitOTEL(ctx context.Context, config OTELConfig) error {
 	// Create resource with service information
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName(config.ServiceName),
+			semconv.ServiceName("twitch-bot"),
 			semconv.ServiceVersion(config.ServiceVersion),
 			semconv.DeploymentEnvironmentName(config.Environment),
 		),
@@ -60,15 +54,12 @@ func InitOTEL(ctx context.Context, config OTELConfig) error {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Initialize tracing if enabled
-	if config.EnableTracing && config.OTLPEndpoint != "" {
+	// Initialize tracing and metrics if OTLP endpoint is configured
+	if config.OTLPEndpoint != "" {
 		if err := initTracing(ctx, res, config); err != nil {
 			return fmt.Errorf("failed to initialize tracing: %w", err)
 		}
-	}
 
-	// Initialize metrics if enabled
-	if config.EnableMetrics && config.OTLPEndpoint != "" {
 		if err := initMetrics(ctx, res, config); err != nil {
 			return fmt.Errorf("failed to initialize metrics: %w", err)
 		}
@@ -165,28 +156,18 @@ func Shutdown(ctx context.Context) error {
 // GetConfigFromEnv loads OTEL configuration from environment variables
 func GetConfigFromEnv() OTELConfig {
 	config := OTELConfig{
-		ServiceName:      getEnv("OTEL_SERVICE_NAME", "twitch-bot"),
 		ServiceVersion:   getEnv("OTEL_SERVICE_VERSION", "1.0.0"),
 		OTLPEndpoint:     getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		Environment:      getEnv("OTEL_ENVIRONMENT", "development"),
-		EnableTracing:    getEnvBool("OTEL_ENABLE_TRACING", true),
-		EnableMetrics:    getEnvBool("OTEL_ENABLE_METRICS", true),
-		InsecureEndpoint: getEnvBool("OTEL_INSECURE_ENDPOINT", false),
+		InsecureEndpoint: getEnv("OTEL_INSECURE_ENDPOINT", "") == "true",
 	}
 	return config
 }
 
-// Helper functions
+// Helper function
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
-	}
-	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		return value == "true" || value == "1"
 	}
 	return defaultValue
 }
