@@ -85,7 +85,7 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 // CheckAuthAdmin validates for headers for admin routes
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		telemetry.APICallCount.Inc()
+		telemetry.IncrementAPICallCount(r.Context())
 		token := os.Getenv(adminToken)
 		if token == "" {
 			rt.Log.Error("Admin Token missing", errorTokenNotFound)
@@ -224,7 +224,7 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 
 // ChatHandler responds to chat messages
 func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
-	telemetry.ChatMessageCount.Inc()
+	telemetry.IncrementChatMessageCount(r.Context())
 	var chatEvent subscriptions.ChatMessageEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -238,7 +238,7 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 
 // FollowHandler responds to follow events
 func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
-	telemetry.FollowCount.Inc()
+	telemetry.IncrementFollowCount(r.Context())
 	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -265,7 +265,7 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 
 // CheerHandler responds to cheer events
 func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
-	telemetry.CheerCount.Inc()
+	telemetry.IncrementCheerCount(r.Context())
 	var cheerEventResponse subscriptions.CheerEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -279,7 +279,7 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 
 // RewardHandler responds to reward events
 func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
-	telemetry.RewardCount.Inc()
+	telemetry.IncrementRewardCount(r.Context())
 	var rewardEventResponse subscriptions.RewardEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -315,9 +315,8 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // StreamOnlineHandler sends a message to discord
-func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
+func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	rt.streamStartTime = time.Now()
-	telemetry.StreamDuration.SetToCurrentTime()
 	err := rt.Notification.SendNotification("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
 		rt.Log.Error("Sending message to discord", err)
@@ -338,10 +337,10 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // StreamOfflineHandler tracks when streams end
-func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, _ *http.Request) {
+func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 	if !rt.streamStartTime.IsZero() {
 		duration := time.Since(rt.streamStartTime).Seconds()
-		telemetry.StreamDuration.Set(duration)
+		telemetry.RecordStreamDuration(r.Context(), duration)
 		rt.Log.Info("Stream ended", "duration", duration)
 		rt.streamStartTime = time.Time{} // Reset
 	}

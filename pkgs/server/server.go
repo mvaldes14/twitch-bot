@@ -7,7 +7,6 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/routes"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // NewServer creates the http server
@@ -33,7 +32,6 @@ func NewServer(port string) *http.Server {
 	router.HandleFunc("/playing", rs.PlayingHandler)
 	router.HandleFunc("/playlist", rs.PlaylistHandler)
 	router.HandleFunc("/test", rs.TestHandler)
-	router.Handle("/metrics", promhttp.Handler())
 
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
 

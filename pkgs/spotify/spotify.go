@@ -3,6 +3,7 @@ package spotify
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,7 +77,7 @@ func (s *Spotify) NextSong() error {
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
 
-	telemetry.SpotifySongChanged.Inc()
+	telemetry.IncrementSpotifySongChanged(context.Background())
 	s.Log.Info("Changing song")
 
 	req, err := http.NewRequest("POST", nextURL, nil)

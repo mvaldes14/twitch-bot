@@ -27,6 +27,13 @@ func main() {
 	}
 	logger.Info("OpenTelemetry initialized successfully")
 
+	// Initialize OTEL metrics
+	if err := telemetry.InitMetrics(); err != nil {
+		logger.Error("Failed to initialize metrics", err)
+		os.Exit(1)
+	}
+	logger.Info("Metrics initialized successfully")
+
 	// Ensure OTEL providers are shut down on exit
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
