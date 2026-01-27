@@ -25,11 +25,10 @@ type Token struct {
 }
 
 var (
-	ctx                   = context.Background()
-	rdb                   *redis.Client
-	errorFailedConnection = errors.New("failed to connect to Redis")
-	errorNoToken          = errors.New("no token found for the given key")
-	cacheInstance         *Service
+	ctx           = context.Background()
+	rdb           *redis.Client
+	errorNoToken  = errors.New("no token found for the given key")
+	cacheInstance *Service
 )
 
 // NewCacheService initializes a new CacheService instance (singleton)
@@ -56,8 +55,12 @@ func NewCacheService() *Service {
 func (c *Service) GetToken(key string) (string, error) {
 	c.Log.Info("Retrieving token from Redis", key)
 	val, err := rdb.Get(ctx, key).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		c.Log.Error("Token not found in Redis", errorNoToken)
+		return "", err
+	}
+	if err != nil {
+		c.Log.Error("Error retrieving token from Redis", err)
 		return "", err
 	}
 	var token Token

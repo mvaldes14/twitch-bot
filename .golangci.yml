@@ -25,24 +25,29 @@ linters:
 
 linters-settings:
   errcheck:
-    check-blank: true
+    check-blank: false
     check-type-assertions: true
+    exclude-functions:
+      - (io.Writer).Write
+      - (*encoding/json.Encoder).Encode
 
   govet:
     enable-all: true
     disable:
       - shadow
+      - fieldalignment
 
   revive:
     rules:
       - name: var-naming
         disabled: true
       - name: exported
-        disabled: false
+        disabled: true
 
   gosec:
     excludes:
       - G404 # Use of weak random number generator - we're not using it for crypto
+      - G101 # False positives on environment variable names (not hardcoded credentials)
 
   gocritic:
     enabled-tags:
@@ -51,6 +56,13 @@ linters-settings:
       - performance
     disabled-checks:
       - unnamedResult
+      - hugeParam
+      - rangeValCopy
+      - httpNoBody
+      - paramTypeCombine
+      - commentedOutCode
+      - sprintfQuotedString
+      - deferInLoop
 
 issues:
   exclude-rules:

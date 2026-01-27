@@ -3,6 +3,7 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/routes"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
@@ -36,8 +37,9 @@ func NewServer(port string) *http.Server {
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))
 
 	srv := &http.Server{
-		Addr:    port,
-		Handler: rs.TracingMiddleware(rs.MiddleWareRoute(router)),
+		Addr:              port,
+		Handler:           rs.TracingMiddleware(rs.MiddleWareRoute(router)),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return srv
 }

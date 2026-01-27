@@ -3,6 +3,7 @@ package secrets
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -39,14 +40,12 @@ const (
 )
 
 var (
-	errMissingTokenOrID      = errors.New("Token or Client ID not found in environment")
-	errFailedToInit          = errors.New("Failed to initialize secrets, check environment variables")
-	errSpotifyMissingSecrets = errors.New("Missing credentials from environment")
-	errSpotifyNoToken        = errors.New("Failed to produce a new token")
-	errInvalidURL            = errors.New("Invalid URL to add to Spotify Playlist")
-	errInvalidRequest        = errors.New("Failed to create HTTP request")
+	errMissingTokenOrID      = errors.New("token or client ID not found in environment")
+	errSpotifyMissingSecrets = errors.New("missing credentials from environment")
+	errSpotifyNoToken        = errors.New("failed to produce a new token")
+	errInvalidRequest        = errors.New("failed to create HTTP request")
 	errHTTPRequest           = errors.New("HTTP request failed")
-	errResponseParsing       = errors.New("Failed to parse response")
+	errResponseParsing       = errors.New("failed to parse response")
 )
 
 // SecretService implements SecretManager interface
@@ -70,45 +69,51 @@ func (s *SecretService) InitSecrets() {
 	if err == nil {
 		os.Setenv("TWITCH_USER_TOKEN", twitchUToken)
 	} else {
-		twitchUserToken, err := s.GenerateUserToken()
+		newTwitchUserToken, err := s.GenerateUserToken()
 		if err != nil {
 			s.Log.Error("ERROR:", err)
 		}
-		s.Cache.StoreToken(cache.Token{
+		if err := s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_USER_TOKEN",
-			Value:      twitchUserToken,
+			Value:      newTwitchUserToken,
 			Expiration: time.Duration(twitchUserExpiration) * time.Second,
-		})
+		}); err != nil {
+			s.Log.Error("Failed to store twitch user token", err)
+		}
 	}
 
 	twitchAToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
 	if err == nil {
 		os.Setenv("TWITCH_APP_TOKEN", twitchAToken)
 	} else {
-		twitchAppToken, err := s.RefreshAppToken()
+		newTwitchAppToken, err := s.RefreshAppToken()
 		if err != nil {
 			s.Log.Error("ERROR:", err)
 		}
-		s.Cache.StoreToken(cache.Token{
+		if err := s.Cache.StoreToken(cache.Token{
 			Key:        "TWITCH_APP_TOKEN",
-			Value:      twitchAppToken,
+			Value:      newTwitchAppToken,
 			Expiration: time.Duration(twitchAppExpiration) * time.Second,
-		})
+		}); err != nil {
+			s.Log.Error("Failed to store twitch app token", err)
+		}
 	}
 
-	spotifyToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
+	spotifyTk, err := s.Cache.GetToken("SPOTIFY_TOKEN")
 	if err == nil {
-		os.Setenv("SPOTIFY_TOKEN", spotifyToken)
+		os.Setenv("SPOTIFY_TOKEN", spotifyTk)
 	} else {
-		spotifyToken, err := s.GetSpotifyToken()
+		newSpotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
 			s.Log.Error("ERROR:", err)
 		}
-		s.Cache.StoreToken(cache.Token{
+		if err := s.Cache.StoreToken(cache.Token{
 			Key:        "SPOTIFY_TOKEN",
-			Value:      spotifyToken,
+			Value:      newSpotifyToken,
 			Expiration: time.Duration(spotifyExpiration) * time.Second,
-		})
+		}); err != nil {
+			s.Log.Error("Failed to store spotify token", err)
+		}
 	}
 }
 
@@ -130,11 +135,11 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 func (s *SecretService) GenerateUserToken() (string, error) {
 	s.Log.Info("Generating new twitch user token")
 	twitchID := os.Getenv(twitchClientID)
-	twitchSecret := os.Getenv(twitchSecret)
-	if twitchID == "" || twitchSecret == "" {
+	twitchSecretVal := os.Getenv(twitchSecret)
+	if twitchID == "" || twitchSecretVal == "" {
 		return "", errMissingTokenOrID
 	}
-	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecret)
+	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecretVal)
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
@@ -154,9 +159,9 @@ func (s *SecretService) GenerateUserToken() (string, error) {
 // RefreshAppToken uses the refresh token to get a new one
 func (s *SecretService) RefreshAppToken() (string, error) {
 	twitchID := os.Getenv(twitchClientID)
-	twitchSecret := os.Getenv(twitchSecret)
-	twitchRefreshToken := os.Getenv(twitchRefreshToken)
-	payload := fmt.Sprintf("grant_type=refresh_token&refresh_token=%v&client_id=%v&client_secret=%v", twitchRefreshToken, twitchID, twitchSecret)
+	twitchSecretVal := os.Getenv(twitchSecret)
+	twitchRefreshTk := os.Getenv(twitchRefreshToken)
+	payload := fmt.Sprintf("grant_type=refresh_token&refresh_token=%v&client_id=%v&client_secret=%v", twitchRefreshTk, twitchID, twitchSecretVal)
 	req := RequestJSON{
 		Method:  "POST",
 		URL:     twitchTokenURL,
@@ -191,7 +196,8 @@ func (s *SecretService) ValidateToken(token string) bool {
 
 // MakeRequestMarshallJSON makes a request and marshals the response into the target interface
 func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) error {
-	httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBuffer([]byte(req.Payload)))
+	ctx := context.Background()
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bytes.NewBuffer([]byte(req.Payload)))
 	if err != nil {
 		return err
 	}
@@ -227,7 +233,8 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	params.Set("grant_type", "refresh_token")
 	params.Set("refresh_token", refreshToken)
 
-	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(params.Encode()))
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
 		s.Log.Error("Error forming request for GetSpotifyToken", err)
 		return "", errInvalidRequest

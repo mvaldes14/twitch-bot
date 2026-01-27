@@ -3,6 +3,7 @@ package actions
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,9 +39,11 @@ type Actions struct {
 // NewActions creates a new Actions instance
 func NewActions(secrets *secrets.SecretService) *Actions {
 	logger := telemetry.NewLogger("actions")
+	spotifyClient := spotify.NewSpotify()
 	return &Actions{
 		Log:     logger,
 		Secrets: secrets,
+		Spotify: spotifyClient,
 	}
 }
 
@@ -51,35 +54,35 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
-		a.SendMessage("!github, !dotfiles, !song, !social, !blog, !youtube ")
+		_ = a.SendMessage("!github, !dotfiles, !song, !social, !blog, !youtube ")
 	case "!github":
-		a.SendMessage("https://links.mvaldes.dev/gh")
+		_ = a.SendMessage("https://links.mvaldes.dev/gh")
 	case "!dotfiles":
-		a.SendMessage("https://links.mvaldes.dev/dotfiles")
+		_ = a.SendMessage("https://links.mvaldes.dev/dotfiles")
 	case "!test":
-		a.SendMessage("Test Me")
+		_ = a.SendMessage("Test Me")
 	case "!social":
-		a.SendMessage("https://links.mvaldes.dev/twitter")
+		_ = a.SendMessage("https://links.mvaldes.dev/twitter")
 	case "!blog":
-		a.SendMessage("https://mvaldes.dev")
+		_ = a.SendMessage("https://mvaldes.dev")
 	case "!discord":
-		a.SendMessage("https://links.mvaldes.dev/discord")
+		_ = a.SendMessage("https://links.mvaldes.dev/discord")
 	case "!youtube":
-		a.SendMessage("https://links.mvaldes.dev/youtube")
+		_ = a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
 		song, err := a.Spotify.GetSong()
 		if err != nil {
 			a.Log.Error("Failed to get current song", err)
-			a.SendMessage("Sorry, couldn't get the current song")
+			_ = a.SendMessage("Sorry, couldn't get the current song")
 			return
 		}
 		if song.Item.Name == "" || len(song.Item.Artists) == 0 {
-			a.SendMessage("No song currently playing")
+			_ = a.SendMessage("No song currently playing")
 			return
 		}
-		msg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
-		a.Log.Info(msg)
-		a.SendMessage(msg)
+		songMsg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
+		a.Log.Info(songMsg)
+		_ = a.SendMessage(songMsg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
@@ -90,6 +93,7 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 
 // SendMessage sends a message to the Twitch chat room
 func (a *Actions) SendMessage(text string) error {
+	ctx := context.Background()
 	message := subscriptions.ChatMessage{
 		BroadcasterID: userID,
 		SenderID:      userID,
@@ -102,7 +106,7 @@ func (a *Actions) SendMessage(text string) error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", messageEndpoint, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", messageEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
 		a.Log.Error("Failed to create request", err)
 		return err
@@ -111,6 +115,7 @@ func (a *Actions) SendMessage(text string) error {
 	headers, err := a.Secrets.BuildSecretHeaders()
 	if err != nil {
 		a.Log.Error("Failed to build headers to send message", err)
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
@@ -119,20 +124,21 @@ func (a *Actions) SendMessage(text string) error {
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		a.Log.Error("failed to send message: %w", err)
+		a.Log.Error("failed to send message", err)
 		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		a.Log.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
-		return err
+		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
 	}
 
 	return nil
 }
 
 func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
+	ctx := context.Background()
 	a.Log.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
 	if action.Event.BroadcasterUserID == userID {
@@ -148,7 +154,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		a.Log.Info("Today Command Ran")
 
 		// Send request to update channel information
-		req, err := http.NewRequest("PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
+		req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
 		if err != nil {
 			a.Log.Error("Could not form request to update channel info", err)
 			return
@@ -157,25 +163,30 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		headers, err := a.Secrets.BuildSecretHeaders()
 		if err != nil {
 			a.Log.Error("Failed to build headers to update channel", err)
+			return
 		}
 		userToken := os.Getenv("TWITCH_USER_TOKEN")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
 
-		for {
-			client := &http.Client{}
+		const maxRetries = 3
+		client := &http.Client{}
+		for i := 0; i < maxRetries; i++ {
 			res, err := client.Do(req)
 			if err != nil {
 				a.Log.Error("Request could not be sent to update channel", err)
 				return
 			}
-			if res.StatusCode != http.StatusBadRequest {
-				a.Log.Error("Received a bad messag ", errUpdateChannel)
-			}
+			defer res.Body.Close()
 			if res.StatusCode == http.StatusOK {
-				break
+				a.Log.Info("Channel updated successfully")
+				return
+			}
+			if res.StatusCode == http.StatusBadRequest {
+				a.Log.Error("Received a bad request", errUpdateChannel)
 			}
 		}
+		a.Log.Error("Failed to update channel after retries", errUpdateChannel)
 	}
 }

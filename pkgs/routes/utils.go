@@ -3,6 +3,7 @@ package routes
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,9 +21,10 @@ const (
 
 // MakeRequestMarshallJSON receives a request and marshals the response into a struct
 func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
-	req, err := http.NewRequest(r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
 	if err != nil {
-		return nil
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 	for k, v := range r.Headers {
 		req.Header.Set(k, v)
@@ -38,6 +40,9 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 	return json.Unmarshal(body, jsonType)
 }
 
@@ -96,7 +101,5 @@ func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string
 
 	// Marshal the entire payload
 	payloadJSON, _ := json.Marshal(payloadStruct)
-	var payload string
-	payload = string(payloadJSON)
-	return payload
+	return string(payloadJSON)
 }

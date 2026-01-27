@@ -3,6 +3,7 @@ package notifications
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -41,50 +42,58 @@ func NewNotificationService() *NotificationService {
 
 // SendNotification sends a message to a discord channel
 func (n *NotificationService) SendNotification(msg string) error {
+	ctx := context.Background()
 	n.Log.Info("Sending message to discord")
 	url := os.Getenv(discordWebhookURL)
 	payload := fmt.Sprintf(`{"content": "%s"}`, msg)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
-	req.Header.Set("Content-Type", "application/json")
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		n.Log.Error("Failed to generate payload for discord", err)
 		return err
 	}
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := n.Client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		n.Log.Error("Failed to send discord request", err)
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		n.Log.Error("ERROR", errMessageDiscord)
-		// return errMessageDiscord
 	}
 
 	n.Log.Info("Sending message to gotify")
 	token := os.Getenv(gotifyAppToken)
 	if token == "" {
 		n.Log.Error("Gotify token not set", errMessageGotify)
+		return errMessageGotify
 	}
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	w.WriteField("title", "Twitch Bot Notification")
-	w.WriteField("message", msg)
-	w.Close()
+	if err := w.WriteField("title", "Twitch Bot Notification"); err != nil {
+		return err
+	}
+	if err := w.WriteField("message", msg); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
 
-	req, err = http.NewRequest("POST", fmt.Sprintf("%s?token=%s", gotifyURL, token), &body)
-	req.Header.Set("Content-Type", w.FormDataContentType())
+	req, err = http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s?token=%s", gotifyURL, token), &body)
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
 	resp, err = n.Client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		n.Log.Error("Error sending message to gotify", errMessageGotify)
 		return errMessageGotify
 	}

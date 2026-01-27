@@ -61,8 +61,7 @@ type Router struct {
 
 // SubscriptionTypeRequest is the struct for generating new subscriptions
 type SubscriptionTypeRequest struct {
-	Type      string `json:"type"`
-	createdAt time.Time
+	Type string `json:"type"`
 }
 
 // NewRouter creates a new router
@@ -151,9 +150,12 @@ func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	json.Unmarshal(body, &challengeResponse)
+	if err := json.Unmarshal(body, &challengeResponse); err != nil {
+		rt.Log.Error("Failed to unmarshal challenge response", err)
+		return
+	}
 	w.Header().Add("Content-Type", "plain/text")
-	w.Write([]byte(challengeResponse.Challenge))
+	_, _ = w.Write([]byte(challengeResponse.Challenge))
 	rt.Log.Info("Response sent to challenge")
 }
 
@@ -173,7 +175,7 @@ func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
 
 // HealthHandler returns a healthy message
 func (rt *Router) HealthHandler(w http.ResponseWriter, _ *http.Request) {
-	json.NewEncoder(w).Encode("Healthy")
+	_ = json.NewEncoder(w).Encode("Healthy")
 }
 
 // ListHandler returns the current subscription list
@@ -182,6 +184,7 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	if subsList.Total == 0 {
 		rt.Log.Info("No subscriptions found")
@@ -191,7 +194,7 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 	for _, sub := range subsList.Data {
 		rt.Log.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
 		subItem := fmt.Sprintf("ID:%s, Status: %s, Type: %s\n", sub.ID, sub.Status, sub.Type)
-		w.Write([]byte(subItem))
+		_, _ = w.Write([]byte(subItem))
 	}
 }
 
@@ -200,10 +203,14 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 	requestType, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Could not parse payload", http.StatusInternalServerError)
+		return
 	}
 	defer r.Body.Close()
 	var requestTypeString SubscriptionTypeRequest
-	err = json.Unmarshal(requestType, &requestTypeString)
+	if err = json.Unmarshal(requestType, &requestTypeString); err != nil {
+		http.Error(w, "Could not unmarshal payload", http.StatusBadRequest)
+		return
+	}
 
 	subscriptionTypes := map[string]subscriptions.SubscriptionType{
 		"chat": {
@@ -242,12 +249,17 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 			Type:    "stream.offline",
 		},
 	}
-	if subTypeConfig, ok := subscriptionTypes[string(requestTypeString.Type)]; ok {
+	if subTypeConfig, ok := subscriptionTypes[requestTypeString.Type]; ok {
 		payload := rt.GeneratePayload(subTypeConfig)
-		rt.Subs.CreateSubscription(payload)
+		if err := rt.Subs.CreateSubscription(payload); err != nil {
+			rt.Log.Error("Failed to create subscription", err)
+			http.Error(w, "Failed to create subscription", http.StatusInternalServerError)
+			return
+		}
 		rt.Log.Info("Subscription created: " + requestTypeString.Type)
 	} else {
 		rt.Log.Error("Invalid subscription", errorInvalidSbuscription)
+		http.Error(w, "Invalid subscription type", http.StatusBadRequest)
 	}
 }
 
@@ -304,7 +316,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	// Send to chat
-	rt.Actions.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
+	_ = rt.Actions.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
 }
 
 // SubHandler responds to subscription events
@@ -315,9 +327,12 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	json.Unmarshal(body, &subEventResponse)
+	if err := json.Unmarshal(body, &subEventResponse); err != nil {
+		rt.Log.Error("Failed to unmarshal sub event", err)
+		return
+	}
 	// send to chat
-	rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
+	_ = rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
 }
 
 // CheerHandler responds to cheer events
@@ -329,9 +344,12 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	json.Unmarshal(body, &cheerEventResponse)
+	if err := json.Unmarshal(body, &cheerEventResponse); err != nil {
+		rt.Log.Error("Failed to unmarshal cheer event", err)
+		return
+	}
 	// send to chat
-	rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
+	_ = rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
 }
 
 // RewardHandler responds to reward events
@@ -385,7 +403,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 	rt.Log.Info("Testing")
 	// rt.Actions.SendMessage("Test")
-	rt.Notification.SendNotification("Test Message from Twitch Bot")
+	_ = rt.Notification.SendNotification("Test Message from Twitch Bot")
 	// rt.Spotify.NextSong()
 }
 
@@ -405,10 +423,11 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 		rt.Log.Error("Sending message to discord", err)
 		telemetry.RecordError(span, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://automate.mvaldes.dev/webhook/stream-live", nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://automate.mvaldes.dev/webhook/stream-live", http.NoBody)
 	if err != nil {
 		rt.Log.Error("Could not generate request for X post", err)
 		telemetry.RecordError(span, err)
+		return
 	}
 	req.Header.Add("Token", os.Getenv(adminToken))
 	client := http.Client{}
@@ -416,8 +435,10 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		rt.Log.Error("Could not send request to webhook for X post", err)
 		telemetry.RecordError(span, err)
+		return
 	}
-	if resp != nil && resp.StatusCode == 200 {
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
 		rt.Log.Info("Executing Notification Workflows")
 	}
 }
