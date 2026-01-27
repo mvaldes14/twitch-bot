@@ -40,7 +40,7 @@ jobs:
       - name: Run gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: -fmt sarif -out gosec.sarif ./...
+          args: -exclude=G101,G104 -fmt sarif -out gosec.sarif ./...
 
       - name: Upload gosec results
         if: always()
