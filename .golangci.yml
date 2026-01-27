@@ -1,0 +1,81 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detects ineffectual assignments
+    - staticcheck   # Advanced Go linter
+    - unused        # Checks for unused constants, variables, functions and types
+    - gofmt         # Check if code is formatted
+    - goimports     # Check import ordering
+    - misspell      # Finds commonly misspelled words
+    - revive        # Fast, configurable linter
+    - gosec         # Security focused linter
+    - unconvert     # Remove unnecessary type conversions
+    - unparam       # Reports unused function parameters
+    - bodyclose     # Checks if HTTP response body is closed
+    - noctx         # Finds HTTP requests without context
+    - errorlint     # Find code that causes problems with errors
+    - gocritic      # Opinionated linter
+
+linters-settings:
+  errcheck:
+    check-blank: false
+    check-type-assertions: true
+    exclude-functions:
+      - (io.Writer).Write
+      - (*encoding/json.Encoder).Encode
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow
+      - fieldalignment
+
+  revive:
+    rules:
+      - name: var-naming
+        disabled: true
+      - name: exported
+        disabled: true
+
+  gosec:
+    excludes:
+      - G404 # Use of weak random number generator - we're not using it for crypto
+      - G101 # False positives on environment variable names (not hardcoded credentials)
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - unnamedResult
+      - hugeParam
+      - rangeValCopy
+      - httpNoBody
+      - paramTypeCombine
+      - commentedOutCode
+      - sprintfQuotedString
+      - deferInLoop
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+
+    # Allow unused parameters in interface implementations
+    - text: "unused-parameter"
+      linters:
+        - revive
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
