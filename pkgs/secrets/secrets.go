@@ -63,66 +63,68 @@ func NewSecretService() *SecretService {
 	return &SecretService{Log: logger, Cache: cache, httpClient: httpClient}
 }
 
-// InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary
+// InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary.
+// Tokens are stored in Redis and read from there on demand — no os.Setenv needed.
 func (s *SecretService) InitSecrets() {
-	twitchUToken, err := s.Cache.GetToken("TWITCH_USER_TOKEN")
-	if err == nil {
-		os.Setenv("TWITCH_USER_TOKEN", twitchUToken)
-	} else {
-		newTwitchUserToken, err := s.GenerateUserToken()
+	// Twitch User Token (client credentials grant)
+	if _, err := s.Cache.GetToken("TWITCH_USER_TOKEN"); err != nil {
+		newToken, expiresIn, err := s.GenerateUserToken()
 		if err != nil {
-			s.Log.Error("ERROR:", err)
-		}
-		if err := s.Cache.StoreToken(cache.Token{
-			Key:        "TWITCH_USER_TOKEN",
-			Value:      newTwitchUserToken,
-			Expiration: time.Duration(twitchUserExpiration) * time.Second,
-		}); err != nil {
-			s.Log.Error("Failed to store twitch user token", err)
+			s.Log.Error("Failed to generate twitch user token:", err)
+		} else {
+			if err := s.Cache.StoreToken(cache.Token{
+				Key:        "TWITCH_USER_TOKEN",
+				Value:      newToken,
+				Expiration: time.Duration(expiresIn) * time.Second,
+			}); err != nil {
+				s.Log.Error("Failed to store twitch user token", err)
+			}
 		}
 	}
 
-	twitchAToken, err := s.Cache.GetToken("TWITCH_APP_TOKEN")
-	if err == nil {
-		os.Setenv("TWITCH_APP_TOKEN", twitchAToken)
-	} else {
-		newTwitchAppToken, err := s.RefreshAppToken()
+	// Twitch App Token (refresh token grant)
+	if _, err := s.Cache.GetToken("TWITCH_APP_TOKEN"); err != nil {
+		newToken, expiresIn, err := s.RefreshAppToken()
 		if err != nil {
-			s.Log.Error("ERROR:", err)
-		}
-		if err := s.Cache.StoreToken(cache.Token{
-			Key:        "TWITCH_APP_TOKEN",
-			Value:      newTwitchAppToken,
-			Expiration: time.Duration(twitchAppExpiration) * time.Second,
-		}); err != nil {
-			s.Log.Error("Failed to store twitch app token", err)
+			s.Log.Error("Failed to refresh twitch app token:", err)
+		} else {
+			if err := s.Cache.StoreToken(cache.Token{
+				Key:        "TWITCH_APP_TOKEN",
+				Value:      newToken,
+				Expiration: time.Duration(expiresIn) * time.Second,
+			}); err != nil {
+				s.Log.Error("Failed to store twitch app token", err)
+			}
 		}
 	}
 
-	spotifyTk, err := s.Cache.GetToken("SPOTIFY_TOKEN")
-	if err == nil {
-		os.Setenv("SPOTIFY_TOKEN", spotifyTk)
-	} else {
+	// Spotify Token
+	if _, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err != nil {
 		newSpotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
-			s.Log.Error("ERROR:", err)
-		}
-		if err := s.Cache.StoreToken(cache.Token{
-			Key:        "SPOTIFY_TOKEN",
-			Value:      newSpotifyToken,
-			Expiration: time.Duration(spotifyExpiration) * time.Second,
-		}); err != nil {
-			s.Log.Error("Failed to store spotify token", err)
+			s.Log.Error("Failed to get spotify token:", err)
+		} else {
+			if err := s.Cache.StoreToken(cache.Token{
+				Key:        "SPOTIFY_TOKEN",
+				Value:      newSpotifyToken,
+				Expiration: time.Duration(spotifyExpiration) * time.Second,
+			}); err != nil {
+				s.Log.Error("Failed to store spotify token", err)
+			}
 		}
 	}
 }
 
-// BuildSecretHeaders Returns the secrets from env variables to build headers for requests
+// BuildSecretHeaders reads the app token from Redis cache and returns headers for Twitch API requests
 func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
-	token := os.Getenv(twitchAppToken)
+	token, err := s.Cache.GetToken(twitchAppToken)
+	if err != nil || token == "" {
+		s.Log.Error("Missing Twitch app token in cache", errMissingTokenOrID)
+		return RequestHeader{}, errMissingTokenOrID
+	}
 	clientID := os.Getenv(twitchClientID)
-	if token == "" || clientID == "" {
-		s.Log.Error("Missing Twitch token or Client ID in environment", errMissingTokenOrID)
+	if clientID == "" {
+		s.Log.Error("Missing Twitch Client ID in environment", errMissingTokenOrID)
 		return RequestHeader{}, errMissingTokenOrID
 	}
 	return RequestHeader{
@@ -131,13 +133,22 @@ func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 	}, nil
 }
 
+// GetUserToken reads the user token from Redis cache
+func (s *SecretService) GetUserToken() (string, error) {
+	token, err := s.Cache.GetToken(twitchUserToken)
+	if err != nil || token == "" {
+		return "", fmt.Errorf("missing twitch user token in cache: %w", err)
+	}
+	return token, nil
+}
+
 // GenerateUserToken acquires a new token that is valid for 2 months
-func (s *SecretService) GenerateUserToken() (string, error) {
+func (s *SecretService) GenerateUserToken() (string, int, error) {
 	s.Log.Info("Generating new twitch user token")
 	twitchID := os.Getenv(twitchClientID)
 	twitchSecretVal := os.Getenv(twitchSecret)
 	if twitchID == "" || twitchSecretVal == "" {
-		return "", errMissingTokenOrID
+		return "", 0, errMissingTokenOrID
 	}
 	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecretVal)
 	headers := map[string]string{
@@ -152,15 +163,32 @@ func (s *SecretService) GenerateUserToken() (string, error) {
 	var response TwitchUserTokenResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
 		s.Log.Error("Failed to make request generating user token", err)
+		return "", 0, fmt.Errorf("generate user token request failed: %w", err)
 	}
-	return response.AccessToken, nil
+	if response.AccessToken == "" {
+		return "", 0, fmt.Errorf("generate user token returned empty access token")
+	}
+
+	expiresIn := response.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = twitchUserExpiration
+	}
+
+	return response.AccessToken, expiresIn, nil
 }
 
-// RefreshAppToken uses the refresh token to get a new one
-func (s *SecretService) RefreshAppToken() (string, error) {
+// RefreshAppToken uses the refresh token to get a new one.
+// It persists the rotated refresh token to Redis and returns the access token and its TTL.
+func (s *SecretService) RefreshAppToken() (string, int, error) {
 	twitchID := os.Getenv(twitchClientID)
 	twitchSecretVal := os.Getenv(twitchSecret)
-	twitchRefreshTk := os.Getenv(twitchRefreshToken)
+
+	// Read refresh token from Redis first, fall back to env var
+	twitchRefreshTk, err := s.Cache.GetToken(twitchRefreshToken)
+	if err != nil || twitchRefreshTk == "" {
+		twitchRefreshTk = os.Getenv(twitchRefreshToken)
+	}
+
 	payload := fmt.Sprintf("grant_type=refresh_token&refresh_token=%v&client_id=%v&client_secret=%v", twitchRefreshTk, twitchID, twitchSecretVal)
 	req := RequestJSON{
 		Method:  "POST",
@@ -171,8 +199,30 @@ func (s *SecretService) RefreshAppToken() (string, error) {
 	var response TwitchRefreshResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
 		s.Log.Error("Failed to make request refreshing token", err)
+		return "", 0, fmt.Errorf("refresh app token request failed: %w", err)
 	}
-	return response.AccessToken, nil
+	if response.AccessToken == "" {
+		return "", 0, fmt.Errorf("refresh app token returned empty access token")
+	}
+
+	// Persist the rotated refresh token so subsequent refreshes use the new one
+	if response.RefreshToken != "" {
+		if err := s.Cache.StoreToken(cache.Token{
+			Key:   twitchRefreshToken,
+			Value: response.RefreshToken,
+			// Refresh tokens don't expire on their own, use a long TTL
+			Expiration: 0,
+		}); err != nil {
+			s.Log.Error("Failed to store rotated refresh token", err)
+		}
+	}
+
+	expiresIn := response.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = twitchAppExpiration
+	}
+
+	return response.AccessToken, expiresIn, nil
 }
 
 // ValidateToken checks if the token is still valid
@@ -189,9 +239,9 @@ func (s *SecretService) ValidateToken(token string) bool {
 	}
 	if response.ExpiresIn > 0 {
 		s.Log.Info("Token is valid, expires in: ", response.ExpiresIn)
-		return false
+		return true
 	}
-	return true
+	return false
 }
 
 // MakeRequestMarshallJSON makes a request and marshals the response into the target interface
@@ -274,4 +324,134 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	}
 
 	return t.AccessToken, nil
+}
+
+// refreshAndStoreAppToken refreshes the Twitch app token and stores it in Redis.
+// Returns the new TTL in seconds.
+func (s *SecretService) refreshAndStoreAppToken() (int, error) {
+	newToken, expiresIn, err := s.RefreshAppToken()
+	if err != nil {
+		return 0, fmt.Errorf("failed to refresh app token: %w", err)
+	}
+	if err := s.Cache.StoreToken(cache.Token{
+		Key:        twitchAppToken,
+		Value:      newToken,
+		Expiration: time.Duration(expiresIn) * time.Second,
+	}); err != nil {
+		return 0, fmt.Errorf("failed to store app token: %w", err)
+	}
+	s.Log.Info("Twitch app token refreshed, expires in:", expiresIn)
+	return expiresIn, nil
+}
+
+// refreshAndStoreUserToken regenerates the Twitch user token and stores it in Redis.
+// Returns the new TTL in seconds.
+func (s *SecretService) refreshAndStoreUserToken() (int, error) {
+	newToken, expiresIn, err := s.GenerateUserToken()
+	if err != nil {
+		return 0, fmt.Errorf("failed to generate user token: %w", err)
+	}
+	if err := s.Cache.StoreToken(cache.Token{
+		Key:        twitchUserToken,
+		Value:      newToken,
+		Expiration: time.Duration(expiresIn) * time.Second,
+	}); err != nil {
+		return 0, fmt.Errorf("failed to store user token: %w", err)
+	}
+	s.Log.Info("Twitch user token refreshed, expires in:", expiresIn)
+	return expiresIn, nil
+}
+
+// refreshAndStoreSpotifyToken refreshes the Spotify token and stores it in Redis.
+func (s *SecretService) refreshAndStoreSpotifyToken() error {
+	newToken, err := s.GetSpotifyToken()
+	if err != nil {
+		return fmt.Errorf("failed to refresh spotify token: %w", err)
+	}
+	if err := s.Cache.StoreToken(cache.Token{
+		Key:        "SPOTIFY_TOKEN",
+		Value:      newToken,
+		Expiration: time.Duration(spotifyExpiration) * time.Second,
+	}); err != nil {
+		return fmt.Errorf("failed to store spotify token: %w", err)
+	}
+	s.Log.Info("Spotify token refreshed")
+	return nil
+}
+
+// RefreshAppTokenAndStore refreshes the Twitch app token and stores it in Redis.
+// Exported for use by other packages on 401 detection.
+func (s *SecretService) RefreshAppTokenAndStore() error {
+	_, err := s.refreshAndStoreAppToken()
+	return err
+}
+
+// RefreshUserTokenAndStore regenerates the Twitch user token and stores it in Redis.
+// Exported for use by other packages on 401 detection.
+func (s *SecretService) RefreshUserTokenAndStore() error {
+	_, err := s.refreshAndStoreUserToken()
+	return err
+}
+
+// StartTokenRenewal launches a background goroutine that periodically validates
+// and proactively refreshes tokens before they expire. It checks every renewalInterval
+// and refreshes tokens when they fail validation or are nearing expiry.
+// The goroutine exits when the provided context is cancelled.
+func (s *SecretService) StartTokenRenewal(ctx context.Context) {
+	const renewalInterval = 30 * time.Minute
+
+	go func() {
+		s.Log.Info("Token renewal goroutine started, checking every 30 minutes")
+		ticker := time.NewTicker(renewalInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				s.Log.Info("Token renewal goroutine stopped")
+				return
+			case <-ticker.C:
+				s.renewTokens()
+			}
+		}
+	}()
+}
+
+// renewTokens validates each token and refreshes it if expired or missing.
+func (s *SecretService) renewTokens() {
+	// Twitch App Token — most critical, expires every ~4 hours
+	appToken, err := s.Cache.GetToken(twitchAppToken)
+	if err != nil || appToken == "" {
+		s.Log.Info("Twitch app token missing from cache, refreshing")
+		if _, err := s.refreshAndStoreAppToken(); err != nil {
+			s.Log.Error("Background renewal: failed to refresh app token", err)
+		}
+	} else if !s.ValidateToken(appToken) {
+		s.Log.Info("Twitch app token failed validation, refreshing")
+		if _, err := s.refreshAndStoreAppToken(); err != nil {
+			s.Log.Error("Background renewal: failed to refresh app token", err)
+		}
+	}
+
+	// Twitch User Token — expires every ~60 days
+	userToken, err := s.Cache.GetToken(twitchUserToken)
+	if err != nil || userToken == "" {
+		s.Log.Info("Twitch user token missing from cache, regenerating")
+		if _, err := s.refreshAndStoreUserToken(); err != nil {
+			s.Log.Error("Background renewal: failed to regenerate user token", err)
+		}
+	} else if !s.ValidateToken(userToken) {
+		s.Log.Info("Twitch user token failed validation, regenerating")
+		if _, err := s.refreshAndStoreUserToken(); err != nil {
+			s.Log.Error("Background renewal: failed to regenerate user token", err)
+		}
+	}
+
+	// Spotify Token — expires every hour
+	if _, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err != nil {
+		s.Log.Info("Spotify token missing from cache, refreshing")
+		if err := s.refreshAndStoreSpotifyToken(); err != nil {
+			s.Log.Error("Background renewal: failed to refresh spotify token", err)
+		}
+	}
 }

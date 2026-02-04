@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
@@ -82,11 +81,14 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	if err != nil {
 		return ValidateSubscription{}, fmt.Errorf("failed to create request: %w", err)
 	}
-	token := os.Getenv("TWITCH_USER_TOKEN")
-	clientID := os.Getenv("TWITCH_CLIENT_ID")
+	headers, err := s.Secrets.BuildSecretHeaders()
+	if err != nil {
+		s.Log.Error("Error getting headers for GetSubscriptions", err)
+		return ValidateSubscription{}, err
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Client-Id", clientID)
+	req.Header.Set("Authorization", "Bearer "+headers.Token)
+	req.Header.Set("Client-Id", headers.ClientID)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

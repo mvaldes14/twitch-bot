@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -27,6 +26,7 @@ const (
 
 var (
 	errUpdateChannel = errors.New("updating channel info")
+	errUnauthorized  = errors.New("401 unauthorized: token expired")
 )
 
 // Actions handles all Twitch chat actions and commands
@@ -91,8 +91,28 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	}
 }
 
-// SendMessage sends a message to the Twitch chat room
+// SendMessage sends a message to the Twitch chat room.
+// On 401 Unauthorized, it triggers a token refresh and retries once.
 func (a *Actions) SendMessage(text string) error {
+	err := a.sendMessageInternal(text)
+	if err == nil {
+		return nil
+	}
+
+	// If we got a 401, refresh the token and retry once
+	if errors.Is(err, errUnauthorized) {
+		a.Log.Info("Got 401 sending message, refreshing app token and retrying")
+		if refreshErr := a.Secrets.RefreshAppTokenAndStore(); refreshErr != nil {
+			a.Log.Error("Failed to refresh app token after 401", refreshErr)
+			return err
+		}
+		return a.sendMessageInternal(text)
+	}
+
+	return err
+}
+
+func (a *Actions) sendMessageInternal(text string) error {
 	ctx := context.Background()
 	message := subscriptions.ChatMessage{
 		BroadcasterID: userID,
@@ -129,6 +149,11 @@ func (a *Actions) SendMessage(text string) error {
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode == http.StatusUnauthorized {
+		a.Log.Info("Received 401 Unauthorized while sending message")
+		return errUnauthorized
+	}
+
 	if res.StatusCode != http.StatusOK {
 		a.Log.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
 		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
@@ -138,23 +163,27 @@ func (a *Actions) SendMessage(text string) error {
 }
 
 func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
-	ctx := context.Background()
 	a.Log.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
-	if action.Event.BroadcasterUserID == userID {
-		// Build the new payload
-		splitMsg := strings.Split(action.Event.Message.Text, " ")
-		msg := strings.Join(splitMsg[1:], " ")
-		payload := fmt.Sprintf(`{
+	if action.Event.BroadcasterUserID != userID {
+		return
+	}
+
+	// Build the new payload
+	splitMsg := strings.Split(action.Event.Message.Text, " ")
+	msg := strings.Join(splitMsg[1:], " ")
+	payloadBody := fmt.Sprintf(`{
       "game_id":"%v",
       "title":"🚨[Devops]🚨- %v",
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
       "broadcaster_language":"es"}`,
-			softwareID, msg)
-		a.Log.Info("Today Command Ran")
+		softwareID, msg)
+	a.Log.Info("Today Command Ran")
 
-		// Send request to update channel information
-		req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
+	const maxAttempts = 2
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		ctx := context.Background()
+		req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payloadBody)))
 		if err != nil {
 			a.Log.Error("Could not form request to update channel info", err)
 			return
@@ -165,28 +194,43 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			a.Log.Error("Failed to build headers to update channel", err)
 			return
 		}
-		userToken := os.Getenv("TWITCH_USER_TOKEN")
+		userToken, err := a.Secrets.GetUserToken()
+		if err != nil {
+			a.Log.Error("Failed to get user token from cache", err)
+			return
+		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
 
-		const maxRetries = 3
 		client := &http.Client{}
-		for i := 0; i < maxRetries; i++ {
-			res, err := client.Do(req)
-			if err != nil {
-				a.Log.Error("Request could not be sent to update channel", err)
-				return
-			}
-			defer res.Body.Close()
-			if res.StatusCode == http.StatusOK {
-				a.Log.Info("Channel updated successfully")
-				return
-			}
-			if res.StatusCode == http.StatusBadRequest {
-				a.Log.Error("Received a bad request", errUpdateChannel)
-			}
+		res, err := client.Do(req)
+		if err != nil {
+			a.Log.Error("Request could not be sent to update channel", err)
+			return
 		}
-		a.Log.Error("Failed to update channel after retries", errUpdateChannel)
+		res.Body.Close()
+
+		if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusNoContent {
+			a.Log.Info("Channel updated successfully")
+			return
+		}
+
+		if res.StatusCode == http.StatusUnauthorized && attempt == 0 {
+			a.Log.Info("Got 401 updating channel, refreshing user token and retrying")
+			if refreshErr := a.Secrets.RefreshUserTokenAndStore(); refreshErr != nil {
+				a.Log.Error("Failed to refresh user token after 401", refreshErr)
+				return
+			}
+			continue
+		}
+
+		if res.StatusCode == http.StatusBadRequest {
+			a.Log.Error("Received a bad request", errUpdateChannel)
+			return
+		}
+
+		a.Log.Error("Unexpected status updating channel", fmt.Errorf("status: %d", res.StatusCode))
+		return
 	}
 }
