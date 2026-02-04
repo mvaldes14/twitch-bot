@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Service struct
@@ -53,19 +54,27 @@ func NewCacheService() *Service {
 
 // GetToken retrieves a token from Redis
 func (c *Service) GetToken(key string) (string, error) {
+	_, span := telemetry.StartSpan(ctx, "redis.get_token",
+		attribute.String("cache.key", key),
+	)
+	defer span.End()
+
 	c.Log.Info("Retrieving token from Redis", key)
 	val, err := rdb.Get(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
 		c.Log.Error("Token not found in Redis", errorNoToken)
+		telemetry.RecordError(span, errorNoToken)
 		return "", err
 	}
 	if err != nil {
 		c.Log.Error("Error retrieving token from Redis", err)
+		telemetry.RecordError(span, err)
 		return "", err
 	}
 	var token Token
 	if err := json.Unmarshal([]byte(val), &token); err != nil {
 		c.Log.Error("Failed to unmarshal token", err)
+		telemetry.RecordError(span, err)
 		return "", err
 	}
 	return token.Value, nil
@@ -73,14 +82,22 @@ func (c *Service) GetToken(key string) (string, error) {
 
 // StoreToken stores a key token in Redis
 func (c *Service) StoreToken(tk Token) error {
+	_, span := telemetry.StartSpan(ctx, "redis.store_token",
+		attribute.String("cache.key", tk.Key),
+		attribute.Int64("cache.expiration_seconds", int64(tk.Expiration.Seconds())),
+	)
+	defer span.End()
+
 	c.Log.Info("Storing token in Redis", tk.Key)
 	jsonToken, err := json.Marshal(tk)
 	if err != nil {
 		c.Log.Error("Failed to marshal token", err)
+		telemetry.RecordError(span, err)
 		return err
 	}
 	if err := rdb.Set(ctx, tk.Key, jsonToken, tk.Expiration).Err(); err != nil {
 		c.Log.Error("Failed to store token in Redis", err)
+		telemetry.RecordError(span, err)
 		return err
 	}
 	c.Log.Info("Token stored successfully", tk.Key)
@@ -89,9 +106,15 @@ func (c *Service) StoreToken(tk Token) error {
 
 // DeleteToken removes a token from Redis
 func (c *Service) DeleteToken(key string) error {
+	_, span := telemetry.StartSpan(ctx, "redis.delete_token",
+		attribute.String("cache.key", key),
+	)
+	defer span.End()
+
 	c.Log.Info("Deleting token from Redis", key)
 	if err := rdb.Del(ctx, key).Err(); err != nil {
 		c.Log.Error("Failed to delete token from Redis", err)
+		telemetry.RecordError(span, err)
 		return err
 	}
 	c.Log.Info("Token deleted successfully", key)
