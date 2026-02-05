@@ -30,7 +30,7 @@ const (
 	spotifyClientID      = "SPOTIFY_CLIENT_ID"
 	spotifyClientSecret  = "SPOTIFY_CLIENT_SECRET"
 	requestTimeout       = 30 * time.Second
-	twitchUserExpiration = 5259487
+	twitchUserExpiration = 14400 // 4 hours in seconds
 	twitchAppExpiration  = 14400
 	spotifyExpiration    = 3600
 
@@ -64,25 +64,57 @@ func NewSecretService() *SecretService {
 	return &SecretService{Log: logger, Cache: cacheService, httpClient: httpClient}
 }
 
-// InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary.
-// Tokens are stored in Redis and read from there on demand — no os.Setenv needed.
+// GetEnvironmentVariable retrieves an environment variable and validates it exists and is not empty.
+// Returns a clear error message indicating which variable is missing and its purpose.
+// Used for: TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, ADMIN_TOKEN, TWITCH_REFRESH_TOKEN
+func (s *SecretService) GetEnvironmentVariable(key string) (string, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		err := fmt.Errorf("required environment variable '%s' is missing or empty - cannot proceed", key)
+		s.Log.Error(err.Error(), nil)
+		return "", err
+	}
+	return value, nil
+}
+
+// InitSecrets initializes the secrets by loading tokens.
+// App tokens (TWITCH_APP_TOKEN) are auto-generated via client credentials.
+// User tokens (TWITCH_USER_TOKEN) are generated from TWITCH_REFRESH_TOKEN and expire every 4 hours. They are automatically refreshed by the background goroutine before expiry.
 func (s *SecretService) InitSecrets() {
 	ctx := context.Background()
 	_, span := telemetry.StartSpan(ctx, "secrets.init_secrets")
 	defer span.End()
 
-	// Twitch User Token (client credentials grant)
+	// Twitch User Token - generated from refresh token, expires every 4 hours
 	if _, err := s.Cache.GetToken("TWITCH_USER_TOKEN"); err != nil {
-		newToken, expiresIn, err := s.GenerateUserToken()
-		if err != nil {
-			s.Log.Error("Failed to generate twitch user token:", err)
-		} else {
+		// Try to load from environment variable first (for initial startup)
+		userTokenFromEnv := os.Getenv(twitchUserToken)
+		if userTokenFromEnv != "" {
+			// Store the environment variable value in Redis with 4-hour TTL
 			if err := s.Cache.StoreToken(cache.Token{
 				Key:        "TWITCH_USER_TOKEN",
-				Value:      newToken,
-				Expiration: time.Duration(expiresIn) * time.Second,
+				Value:      userTokenFromEnv,
+				Expiration: time.Duration(twitchUserExpiration) * time.Second,
 			}); err != nil {
-				s.Log.Error("Failed to store twitch user token", err)
+				s.Log.Error("Failed to store TWITCH_USER_TOKEN in Redis:", err)
+			} else {
+				s.Log.Info("User token loaded from environment and stored in cache")
+			}
+		} else {
+			// No env var, try to generate from refresh token
+			newToken, expiresIn, err := s.RefreshUserToken()
+			if err != nil {
+				s.Log.Error("Failed to generate TWITCH_USER_TOKEN from refresh token - initial token may not have been provided:", err)
+			} else {
+				if err := s.Cache.StoreToken(cache.Token{
+					Key:        "TWITCH_USER_TOKEN",
+					Value:      newToken,
+					Expiration: time.Duration(expiresIn) * time.Second,
+				}); err != nil {
+					s.Log.Error("Failed to store TWITCH_USER_TOKEN in Redis:", err)
+				} else {
+					s.Log.Info("User token generated from refresh token and stored in cache")
+				}
 			}
 		}
 	}
@@ -91,14 +123,14 @@ func (s *SecretService) InitSecrets() {
 	if _, err := s.Cache.GetToken("TWITCH_APP_TOKEN"); err != nil {
 		newToken, expiresIn, err := s.RefreshAppToken()
 		if err != nil {
-			s.Log.Error("Failed to refresh twitch app token:", err)
+			s.Log.Error("Failed to generate TWITCH_APP_TOKEN - check if TWITCH_REFRESH_TOKEN is set and token generation succeeded:", err)
 		} else {
 			if err := s.Cache.StoreToken(cache.Token{
 				Key:        "TWITCH_APP_TOKEN",
 				Value:      newToken,
 				Expiration: time.Duration(expiresIn) * time.Second,
 			}); err != nil {
-				s.Log.Error("Failed to store twitch app token", err)
+				s.Log.Error("Failed to store TWITCH_APP_TOKEN in Redis:", err)
 			}
 		}
 	}
@@ -107,44 +139,52 @@ func (s *SecretService) InitSecrets() {
 	if _, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err != nil {
 		newSpotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
-			s.Log.Error("Failed to get spotify token:", err)
+			s.Log.Error("Failed to generate SPOTIFY_TOKEN - check if SPOTIFY_REFRESH_TOKEN and credentials are set:", err)
 		} else {
 			if err := s.Cache.StoreToken(cache.Token{
 				Key:        "SPOTIFY_TOKEN",
 				Value:      newSpotifyToken,
 				Expiration: time.Duration(spotifyExpiration) * time.Second,
 			}); err != nil {
-				s.Log.Error("Failed to store spotify token", err)
+				s.Log.Error("Failed to store SPOTIFY_TOKEN in Redis:", err)
 			}
 		}
 	}
 }
 
-// BuildSecretHeaders reads the app token from Redis cache and returns headers for Twitch API requests
+// BuildSecretHeaders reads the app token from Redis cache and returns headers for Twitch API requests.
+// Validates that the token exists in cache and that the client ID environment variable is set before returning, fails early if missing.
 func (s *SecretService) BuildSecretHeaders() (RequestHeader, error) {
 	ctx := context.Background()
 	_, span := telemetry.StartSpan(ctx, "secrets.build_headers")
 	defer span.End()
 
+	// Validate token exists in cache before proceeding
 	token, err := s.Cache.GetToken(twitchAppToken)
 	if err != nil || token == "" {
-		s.Log.Error("Missing Twitch app token in cache", errMissingTokenOrID)
-		telemetry.RecordError(span, errMissingTokenOrID)
-		return RequestHeader{}, errMissingTokenOrID
+		cacheMissingErr := fmt.Errorf("TWITCH_APP_TOKEN not found in Redis cache - required for Twitch API requests. Check if token generation succeeded during startup: %w", err)
+		s.Log.Error("Cannot build headers - TWITCH_APP_TOKEN missing from cache", cacheMissingErr)
+		telemetry.RecordError(span, cacheMissingErr)
+		return RequestHeader{}, cacheMissingErr
 	}
-	clientID := os.Getenv(twitchClientID)
-	if clientID == "" {
-		s.Log.Error("Missing Twitch Client ID in environment", errMissingTokenOrID)
-		telemetry.RecordError(span, errMissingTokenOrID)
-		return RequestHeader{}, errMissingTokenOrID
+
+	// Validate client ID environment variable exists
+	clientID, err := s.GetEnvironmentVariable(twitchClientID)
+	if err != nil {
+		envErr := fmt.Errorf("TWITCH_CLIENT_ID not found in environment - required for Twitch API requests: %w", err)
+		s.Log.Error("Cannot build headers - TWITCH_CLIENT_ID missing from environment", envErr)
+		telemetry.RecordError(span, envErr)
+		return RequestHeader{}, envErr
 	}
+
 	return RequestHeader{
 		Token:    token,
 		ClientID: clientID,
 	}, nil
 }
 
-// GetUserToken reads the user token from Redis cache
+// GetUserToken reads the user token from Redis cache.
+// Returns a specific error if the token is missing, which would prevent user-scoped Twitch API operations.
 func (s *SecretService) GetUserToken() (string, error) {
 	ctx := context.Background()
 	_, span := telemetry.StartSpan(ctx, "secrets.get_user_token")
@@ -152,60 +192,12 @@ func (s *SecretService) GetUserToken() (string, error) {
 
 	token, err := s.Cache.GetToken(twitchUserToken)
 	if err != nil || token == "" {
-		tokenErr := fmt.Errorf("missing twitch user token in cache: %w", err)
+		tokenErr := fmt.Errorf("TWITCH_USER_TOKEN not found in Redis cache - required for Twitch API user-scoped operations. Token expires every 4 hours. If missing, the background renewal goroutine will automatically generate a new one. If still missing after refresh, the TWITCH_REFRESH_TOKEN may be invalid or revoked: %w", err)
+		s.Log.Error("TWITCH_USER_TOKEN missing from cache", tokenErr)
 		telemetry.RecordError(span, tokenErr)
 		return "", tokenErr
 	}
 	return token, nil
-}
-
-// GenerateUserToken acquires a new token that is valid for 2 months
-func (s *SecretService) GenerateUserToken() (string, int, error) {
-	ctx := context.Background()
-	_, span := telemetry.StartExternalSpan(ctx, "twitch.generate_user_token", "twitch", "generate_user_token")
-	defer span.End()
-
-	s.Log.Info("Generating new twitch user token")
-	twitchID := os.Getenv(twitchClientID)
-	twitchSecretVal := os.Getenv(twitchSecret)
-	if twitchID == "" || twitchSecretVal == "" {
-		telemetry.RecordError(span, errMissingTokenOrID)
-		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
-		return "", 0, errMissingTokenOrID
-	}
-	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecretVal)
-	headers := map[string]string{
-		"Content-Type": "application/x-www-form-urlencoded",
-	}
-	req := RequestJSON{
-		Method:  "POST",
-		URL:     twitchTokenURL,
-		Payload: payload,
-		Headers: headers,
-	}
-	var response TwitchUserTokenResponse
-	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error("Failed to make request generating user token", err)
-		telemetry.RecordError(span, err)
-		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
-		return "", 0, fmt.Errorf("generate user token request failed: %w", err)
-	}
-	if response.AccessToken == "" {
-		emptyErr := fmt.Errorf("generate user token returned empty access token")
-		telemetry.RecordError(span, emptyErr)
-		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
-		return "", 0, emptyErr
-	}
-
-	expiresIn := response.ExpiresIn
-	if expiresIn <= 0 {
-		expiresIn = twitchUserExpiration
-	}
-
-	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
-	telemetry.IncrementTokenRefreshTotal(ctx, "user", "success")
-	telemetry.RecordTokenTTL(ctx, "user", float64(expiresIn))
-	return response.AccessToken, expiresIn, nil
 }
 
 // RefreshAppToken uses the refresh token to get a new one.
@@ -225,6 +217,15 @@ func (s *SecretService) RefreshAppToken() (string, int, error) {
 		telemetry.AddSpanAttributes(span, attribute.String("refresh_token.source", "env"))
 	} else {
 		telemetry.AddSpanAttributes(span, attribute.String("refresh_token.source", "redis"))
+	}
+
+	// Validate refresh token is present
+	if twitchRefreshTk == "" {
+		missingErr := fmt.Errorf("twitch refresh token not found in redis or environment")
+		s.Log.Error("Cannot refresh app token - refresh token missing", missingErr)
+		telemetry.RecordError(span, missingErr)
+		telemetry.IncrementTokenRefreshTotal(ctx, "app", "error")
+		return "", 0, missingErr
 	}
 
 	payload := fmt.Sprintf("grant_type=refresh_token&refresh_token=%v&client_id=%v&client_secret=%v", twitchRefreshTk, twitchID, twitchSecretVal)
@@ -269,6 +270,73 @@ func (s *SecretService) RefreshAppToken() (string, int, error) {
 	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
 	telemetry.IncrementTokenRefreshTotal(ctx, "app", "success")
 	telemetry.RecordTokenTTL(ctx, "app", float64(expiresIn))
+	return response.AccessToken, expiresIn, nil
+}
+
+// RefreshUserToken generates a new user token from the refresh token. User tokens expire every 4 hours and are auto-refreshed by the background goroutine.
+func (s *SecretService) RefreshUserToken() (string, int, error) {
+	ctx := context.Background()
+	_, span := telemetry.StartExternalSpan(ctx, "twitch.refresh_user_token", "twitch", "refresh_user_token")
+	defer span.End()
+
+	twitchID := os.Getenv(twitchClientID)
+	twitchSecretVal := os.Getenv(twitchSecret)
+
+	// Read refresh token from Redis first, fall back to env var
+	twitchRefreshTk, err := s.Cache.GetToken(twitchRefreshToken)
+	if err != nil || twitchRefreshTk == "" {
+		twitchRefreshTk = os.Getenv(twitchRefreshToken)
+	}
+
+	if twitchID == "" || twitchSecretVal == "" || twitchRefreshTk == "" {
+		telemetry.RecordError(span, errMissingTokenOrID)
+		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
+		return "", 0, errMissingTokenOrID
+	}
+
+	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=refresh_token&refresh_token=%v", twitchID, twitchSecretVal, twitchRefreshTk)
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	req := RequestJSON{
+		Method:  "POST",
+		URL:     twitchTokenURL,
+		Payload: payload,
+		Headers: headers,
+	}
+	var response TwitchUserTokenResponse
+	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
+		s.Log.Error("Failed to make request refreshing user token", err)
+		telemetry.RecordError(span, err)
+		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
+		return "", 0, fmt.Errorf("refresh user token request failed: %w", err)
+	}
+	if response.AccessToken == "" {
+		emptyErr := fmt.Errorf("refresh user token returned empty access token")
+		telemetry.RecordError(span, emptyErr)
+		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
+		return "", 0, emptyErr
+	}
+
+	expiresIn := response.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = twitchUserExpiration
+	}
+
+	// Store new refresh token if provided in response
+	if response.RefreshToken != "" {
+		if err := s.Cache.StoreToken(cache.Token{
+			Key:        twitchRefreshToken,
+			Value:      response.RefreshToken,
+			Expiration: 365 * 24 * time.Hour, // Long TTL for refresh token
+		}); err != nil {
+			s.Log.Info("Failed to store new refresh token in Redis:", err)
+		}
+	}
+
+	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
+	telemetry.IncrementTokenRefreshTotal(ctx, "user", "success")
+	telemetry.RecordTokenTTL(ctx, "user", float64(expiresIn))
 	return response.AccessToken, expiresIn, nil
 }
 
@@ -326,7 +394,8 @@ func (s *SecretService) MakeRequestMarshallJSON(req RequestJSON, target any) err
 	return json.Unmarshal(body, target)
 }
 
-// GetSpotifyToken retrieves a new Spotify token using the refresh token
+// GetSpotifyToken retrieves a new Spotify token using the refresh token.
+// Returns a specific error indicating which Spotify credentials are missing.
 func (s *SecretService) GetSpotifyToken() (string, error) {
 	ctx := context.Background()
 	_, span := telemetry.StartExternalSpan(ctx, "spotify.refresh_token", "spotify", "refresh_token")
@@ -336,10 +405,23 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	clientID := os.Getenv(spotifyClientID)
 	clientSecret := os.Getenv(spotifyClientSecret)
 
-	if refreshToken == "" || clientID == "" || clientSecret == "" {
-		s.Log.Error("Missing Spotify credentials in environment", errSpotifyMissingSecrets)
-		telemetry.RecordError(span, errSpotifyMissingSecrets)
-		return "", errSpotifyMissingSecrets
+	// Build detailed error message indicating which credentials are missing
+	var missingVars []string
+	if refreshToken == "" {
+		missingVars = append(missingVars, "SPOTIFY_REFRESH_TOKEN")
+	}
+	if clientID == "" {
+		missingVars = append(missingVars, "SPOTIFY_CLIENT_ID")
+	}
+	if clientSecret == "" {
+		missingVars = append(missingVars, "SPOTIFY_CLIENT_SECRET")
+	}
+
+	if len(missingVars) > 0 {
+		missingErr := fmt.Errorf("missing Spotify credentials in environment: %v - required to refresh Spotify access tokens. Pass these as environment variables", missingVars)
+		s.Log.Error(missingErr.Error(), nil)
+		telemetry.RecordError(span, missingErr)
+		return "", missingErr
 	}
 
 	encodedToken := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
@@ -422,16 +504,16 @@ func (s *SecretService) refreshAndStoreAppToken() error {
 	return nil
 }
 
-// refreshAndStoreUserToken regenerates the Twitch user token and stores it in Redis.
+// refreshAndStoreUserToken refreshes the Twitch user token and stores it in Redis.
 func (s *SecretService) refreshAndStoreUserToken() error {
 	ctx := context.Background()
 	_, span := telemetry.StartSpan(ctx, "secrets.refresh_and_store_user_token")
 	defer span.End()
 
-	newToken, expiresIn, err := s.GenerateUserToken()
+	newToken, expiresIn, err := s.RefreshUserToken()
 	if err != nil {
 		telemetry.RecordError(span, err)
-		return fmt.Errorf("failed to generate user token: %w", err)
+		return fmt.Errorf("failed to refresh user token: %w", err)
 	}
 	if err := s.Cache.StoreToken(cache.Token{
 		Key:        twitchUserToken,
@@ -475,7 +557,7 @@ func (s *SecretService) RefreshAppTokenAndStore() error {
 	return s.refreshAndStoreAppToken()
 }
 
-// RefreshUserTokenAndStore regenerates the Twitch user token and stores it in Redis.
+// RefreshUserTokenAndStore refreshes the Twitch user token and stores it in Redis.
 // Exported for use by other packages on 401 detection.
 func (s *SecretService) RefreshUserTokenAndStore() error {
 	return s.refreshAndStoreUserToken()
@@ -534,22 +616,22 @@ func (s *SecretService) renewTokens() {
 		telemetry.IncrementTokenValidationTotal(ctx, "app", true)
 	}
 
-	// Twitch User Token — expires every ~60 days
+	// Twitch User Token — expires every 4 hours, proactively refresh
 	userToken, err := s.Cache.GetToken(twitchUserToken)
 	switch {
 	case err != nil || userToken == "":
-		s.Log.Info("Twitch user token missing from cache, regenerating")
+		s.Log.Info("Twitch user token missing from cache, generating new token")
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "refresh_missing"))
 		if err := s.refreshAndStoreUserToken(); err != nil {
-			s.Log.Error("Background renewal: failed to regenerate user token", err)
+			s.Log.Error("Background renewal: failed to generate user token", err)
 			telemetry.RecordError(span, err)
 		}
 	case !s.ValidateToken(userToken):
-		s.Log.Info("Twitch user token failed validation, regenerating")
+		s.Log.Info("Twitch user token failed validation, generating new token")
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "refresh_invalid"))
 		telemetry.IncrementTokenValidationTotal(ctx, "user", false)
 		if err := s.refreshAndStoreUserToken(); err != nil {
-			s.Log.Error("Background renewal: failed to regenerate user token", err)
+			s.Log.Error("Background renewal: failed to generate user token", err)
 			telemetry.RecordError(span, err)
 		}
 	default:

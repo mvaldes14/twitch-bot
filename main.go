@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,9 +16,44 @@ import (
 
 const port = ":3000"
 
+// Required environment variables for the application
+var requiredEnvVars = []string{
+	"TWITCH_CLIENT_ID",
+	"TWITCH_CLIENT_SECRET",
+	"TWITCH_REFRESH_TOKEN",
+	"TWITCH_USER_TOKEN",
+	"ADMIN_TOKEN",
+	"SPOTIFY_CLIENT_ID",
+	"SPOTIFY_CLIENT_SECRET",
+	"SPOTIFY_REFRESH_TOKEN",
+	"REDIS_URL",
+}
+
+// validateRequiredEnvVars checks that all required environment variables are present
+// and returns a detailed error message for each missing variable
+func validateRequiredEnvVars() error {
+	var missingVars []string
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			missingVars = append(missingVars, envVar)
+		}
+	}
+	if len(missingVars) > 0 {
+		return fmt.Errorf("missing required environment variables: %v", missingVars)
+	}
+	return nil
+}
+
 func main() {
 	ctx := context.Background()
 	logger := telemetry.NewLogger("main")
+
+	// Validate required environment variables before initialization
+	if err := validateRequiredEnvVars(); err != nil {
+		logger.Error("Environment validation failed - aborting startup", err)
+		os.Exit(1)
+	}
+	logger.Info("Environment variables validated successfully")
 
 	// Initialize OpenTelemetry
 	otelConfig := telemetry.GetConfigFromEnv()

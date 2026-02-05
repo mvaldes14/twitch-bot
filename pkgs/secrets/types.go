@@ -26,9 +26,10 @@ type TwitchRefreshResponse struct {
 
 // TwitchUserTokenResponse represents the response from getting a new user token
 type TwitchUserTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
-	TokenType   string `json:"token_type"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	TokenType    string `json:"token_type"`
 }
 
 // DopplerSecretUpdate represents the response from Doppler API

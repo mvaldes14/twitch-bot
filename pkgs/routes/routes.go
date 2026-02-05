@@ -82,20 +82,35 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 	}
 }
 
-// CheckAuthAdmin validates for headers for admin routes
+// CheckAuthAdmin validates authorization headers for admin routes
+// Validates ADMIN_TOKEN environment variable exists before attempting auth
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		telemetry.IncrementAPICallCount(r.Context())
+		ctx, span := telemetry.StartSpan(r.Context(), "auth_admin_check")
+		defer span.End()
+
+		telemetry.IncrementAPICallCount(ctx)
+
+		// Validate ADMIN_TOKEN environment variable exists before attempting auth
 		token := os.Getenv(adminToken)
 		if token == "" {
-			rt.Log.Error("Admin Token missing", errorTokenNotFound)
-			w.WriteHeader(http.StatusUnauthorized)
+			errMsg := fmt.Errorf("ADMIN_TOKEN not found in environment - required for admin endpoints. Pass ADMIN_TOKEN as an environment variable at startup")
+			rt.Log.Error("Cannot authenticate request - ADMIN_TOKEN missing from environment configuration", errMsg)
+			telemetry.RecordError(span, errMsg)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "admin authentication not configured",
+			})
 			return
 		}
+
+		// Check if provided token matches environment token
 		if r.Header.Get("Authorization") == token {
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		} else {
-			rt.Log.Error("Admin token is invalid", errorTokenNotValid)
+			errMsg := fmt.Errorf("invalid ADMIN_TOKEN provided in Authorization header")
+			rt.Log.Error("Admin authentication failed - provided token does not match", errMsg)
+			telemetry.RecordError(span, errMsg)
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
@@ -468,6 +483,7 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // StreamOnlineHandler sends a message to discord
+// Validates ADMIN_TOKEN environment variable exists before making requests
 func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_stream_online")
 	defer span.End()
@@ -483,13 +499,24 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 		rt.Log.Error("Sending message to discord", err)
 		telemetry.RecordError(span, err)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://automate.mvaldes.dev/webhook/stream-live", http.NoBody)
 	if err != nil {
 		rt.Log.Error("Could not generate request for X post", err)
 		telemetry.RecordError(span, err)
 		return
 	}
-	req.Header.Add("Token", os.Getenv(adminToken))
+
+	// Validate ADMIN_TOKEN exists before attempting to use it
+	adminTokenValue := os.Getenv(adminToken)
+	if adminTokenValue == "" {
+		errMsg := fmt.Errorf("ADMIN_TOKEN not found in environment - required for webhook notifications. Pass ADMIN_TOKEN as an environment variable at startup")
+		rt.Log.Error("Cannot send stream notification - ADMIN_TOKEN missing from environment", errMsg)
+		telemetry.RecordError(span, errMsg)
+		return
+	}
+
+	req.Header.Add("Token", adminTokenValue)
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

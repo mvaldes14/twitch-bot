@@ -105,12 +105,22 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 
 // SendMessage sends a message to the Twitch chat room.
 // On 401 Unauthorized, it triggers a token refresh and retries once.
+// Validates headers exist before making API call
 func (a *Actions) SendMessage(text string) error {
 	ctx := context.Background()
 	_, span := telemetry.StartExternalSpan(ctx, "twitch.send_message", "twitch", "send_message")
 	defer span.End()
 
-	err := a.sendMessageInternal(ctx, text)
+	// Validate Twitch API credentials before attempting message send
+	_, err := a.Secrets.BuildSecretHeaders()
+	if err != nil {
+		errMsg := fmt.Errorf("cannot send message to Twitch chat without valid API credentials: %w", err)
+		a.Log.Error("Cannot send message to Twitch chat - API credentials missing", errMsg)
+		telemetry.RecordError(span, errMsg)
+		return errMsg
+	}
+
+	err = a.sendMessageInternal(ctx, text)
 	if err == nil {
 		telemetry.IncrementMessageSent(ctx, "success")
 		return nil
@@ -161,11 +171,14 @@ func (a *Actions) sendMessageInternal(ctx context.Context, text string) error {
 		return err
 	}
 
+	// Validate headers exist before making API call
 	headers, err := a.Secrets.BuildSecretHeaders()
 	if err != nil {
-		a.Log.Error("Failed to build headers to send message", err)
-		return err
+		headerErr := fmt.Errorf("failed to build required headers for sending message: %w", err)
+		a.Log.Error("Cannot send message - missing required credentials", headerErr)
+		return headerErr
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
@@ -202,6 +215,15 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		return
 	}
 
+	// Validate Twitch API credentials before attempting channel update
+	_, err := a.Secrets.BuildSecretHeaders()
+	if err != nil {
+		errMsg := fmt.Errorf("cannot update channel without valid API credentials: %w", err)
+		a.Log.Error("Cannot update channel - API credentials missing", errMsg)
+		telemetry.RecordError(span, errMsg)
+		return
+	}
+
 	// Build the new payload
 	splitMsg := strings.Split(action.Event.Message.Text, " ")
 	msg := strings.Join(splitMsg[1:], " ")
@@ -222,18 +244,23 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			return
 		}
 
+		// Validate headers exist before making API call
 		headers, err := a.Secrets.BuildSecretHeaders()
 		if err != nil {
-			a.Log.Error("Failed to build headers to update channel", err)
-			telemetry.RecordError(span, err)
+			headerErr := fmt.Errorf("failed to build required headers for updating channel: %w", err)
+			a.Log.Error("Cannot update channel - missing required credentials", headerErr)
+			telemetry.RecordError(span, headerErr)
 			return
 		}
+
 		userToken, err := a.Secrets.GetUserToken()
 		if err != nil {
-			a.Log.Error("Failed to get user token from cache", err)
-			telemetry.RecordError(span, err)
+			headerErr := fmt.Errorf("failed to get user token from cache: %w", err)
+			a.Log.Error("Cannot update channel - user token missing from cache", headerErr)
+			telemetry.RecordError(span, headerErr)
 			return
 		}
+
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)

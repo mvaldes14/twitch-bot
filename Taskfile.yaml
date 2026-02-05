@@ -1,5 +1,4 @@
 version: "3"
-dotenv: [".env"]
 tasks:
     keys:
         description: "Validates the tokens are present in redis"
