@@ -20,8 +20,8 @@ const (
 )
 
 var (
-	errMessageDiscord = errors.New("Error sending message to discord")
-	errMessageGotify  = errors.New("Error sending message to gotify")
+	errMessageDiscord = errors.New("error sending message to discord")
+	errMessageGotify  = errors.New("error sending message to gotify")
 )
 
 // NotificationService struct to hold the properties

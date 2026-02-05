@@ -59,9 +59,9 @@ type SecretService struct {
 // NewSecretService creates a new instance of SecretService
 func NewSecretService() *SecretService {
 	logger := telemetry.NewLogger("secrets")
-	cache := cache.NewCacheService()
+	cacheService := cache.NewCacheService()
 	httpClient := &http.Client{Timeout: requestTimeout}
-	return &SecretService{Log: logger, Cache: cache, httpClient: httpClient}
+	return &SecretService{Log: logger, Cache: cacheService, httpClient: httpClient}
 }
 
 // InitSecrets initializes the secrets by checking the cache and generating new tokens if necessary.
@@ -399,8 +399,7 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 }
 
 // refreshAndStoreAppToken refreshes the Twitch app token and stores it in Redis.
-// Returns the new TTL in seconds.
-func (s *SecretService) refreshAndStoreAppToken() (int, error) {
+func (s *SecretService) refreshAndStoreAppToken() error {
 	ctx := context.Background()
 	_, span := telemetry.StartSpan(ctx, "secrets.refresh_and_store_app_token")
 	defer span.End()
@@ -408,7 +407,7 @@ func (s *SecretService) refreshAndStoreAppToken() (int, error) {
 	newToken, expiresIn, err := s.RefreshAppToken()
 	if err != nil {
 		telemetry.RecordError(span, err)
-		return 0, fmt.Errorf("failed to refresh app token: %w", err)
+		return fmt.Errorf("failed to refresh app token: %w", err)
 	}
 	if err := s.Cache.StoreToken(cache.Token{
 		Key:        twitchAppToken,
@@ -416,16 +415,15 @@ func (s *SecretService) refreshAndStoreAppToken() (int, error) {
 		Expiration: time.Duration(expiresIn) * time.Second,
 	}); err != nil {
 		telemetry.RecordError(span, err)
-		return 0, fmt.Errorf("failed to store app token: %w", err)
+		return fmt.Errorf("failed to store app token: %w", err)
 	}
 	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
 	s.Log.Info("Twitch app token refreshed, expires in:", expiresIn)
-	return expiresIn, nil
+	return nil
 }
 
 // refreshAndStoreUserToken regenerates the Twitch user token and stores it in Redis.
-// Returns the new TTL in seconds.
-func (s *SecretService) refreshAndStoreUserToken() (int, error) {
+func (s *SecretService) refreshAndStoreUserToken() error {
 	ctx := context.Background()
 	_, span := telemetry.StartSpan(ctx, "secrets.refresh_and_store_user_token")
 	defer span.End()
@@ -433,7 +431,7 @@ func (s *SecretService) refreshAndStoreUserToken() (int, error) {
 	newToken, expiresIn, err := s.GenerateUserToken()
 	if err != nil {
 		telemetry.RecordError(span, err)
-		return 0, fmt.Errorf("failed to generate user token: %w", err)
+		return fmt.Errorf("failed to generate user token: %w", err)
 	}
 	if err := s.Cache.StoreToken(cache.Token{
 		Key:        twitchUserToken,
@@ -441,11 +439,11 @@ func (s *SecretService) refreshAndStoreUserToken() (int, error) {
 		Expiration: time.Duration(expiresIn) * time.Second,
 	}); err != nil {
 		telemetry.RecordError(span, err)
-		return 0, fmt.Errorf("failed to store user token: %w", err)
+		return fmt.Errorf("failed to store user token: %w", err)
 	}
 	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
 	s.Log.Info("Twitch user token refreshed, expires in:", expiresIn)
-	return expiresIn, nil
+	return nil
 }
 
 // refreshAndStoreSpotifyToken refreshes the Spotify token and stores it in Redis.
@@ -474,15 +472,13 @@ func (s *SecretService) refreshAndStoreSpotifyToken() error {
 // RefreshAppTokenAndStore refreshes the Twitch app token and stores it in Redis.
 // Exported for use by other packages on 401 detection.
 func (s *SecretService) RefreshAppTokenAndStore() error {
-	_, err := s.refreshAndStoreAppToken()
-	return err
+	return s.refreshAndStoreAppToken()
 }
 
 // RefreshUserTokenAndStore regenerates the Twitch user token and stores it in Redis.
 // Exported for use by other packages on 401 detection.
 func (s *SecretService) RefreshUserTokenAndStore() error {
-	_, err := s.refreshAndStoreUserToken()
-	return err
+	return s.refreshAndStoreUserToken()
 }
 
 // StartTokenRenewal launches a background goroutine that periodically validates
@@ -517,44 +513,46 @@ func (s *SecretService) renewTokens() {
 
 	// Twitch App Token — most critical, expires every ~4 hours
 	appToken, err := s.Cache.GetToken(twitchAppToken)
-	if err != nil || appToken == "" {
+	switch {
+	case err != nil || appToken == "":
 		s.Log.Info("Twitch app token missing from cache, refreshing")
 		telemetry.AddSpanAttributes(span, attribute.String("app_token.action", "refresh_missing"))
-		if _, err := s.refreshAndStoreAppToken(); err != nil {
+		if err := s.refreshAndStoreAppToken(); err != nil {
 			s.Log.Error("Background renewal: failed to refresh app token", err)
 			telemetry.RecordError(span, err)
 		}
-	} else if !s.ValidateToken(appToken) {
+	case !s.ValidateToken(appToken):
 		s.Log.Info("Twitch app token failed validation, refreshing")
 		telemetry.AddSpanAttributes(span, attribute.String("app_token.action", "refresh_invalid"))
 		telemetry.IncrementTokenValidationTotal(ctx, "app", false)
-		if _, err := s.refreshAndStoreAppToken(); err != nil {
+		if err := s.refreshAndStoreAppToken(); err != nil {
 			s.Log.Error("Background renewal: failed to refresh app token", err)
 			telemetry.RecordError(span, err)
 		}
-	} else {
+	default:
 		telemetry.AddSpanAttributes(span, attribute.String("app_token.action", "still_valid"))
 		telemetry.IncrementTokenValidationTotal(ctx, "app", true)
 	}
 
 	// Twitch User Token — expires every ~60 days
 	userToken, err := s.Cache.GetToken(twitchUserToken)
-	if err != nil || userToken == "" {
+	switch {
+	case err != nil || userToken == "":
 		s.Log.Info("Twitch user token missing from cache, regenerating")
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "refresh_missing"))
-		if _, err := s.refreshAndStoreUserToken(); err != nil {
+		if err := s.refreshAndStoreUserToken(); err != nil {
 			s.Log.Error("Background renewal: failed to regenerate user token", err)
 			telemetry.RecordError(span, err)
 		}
-	} else if !s.ValidateToken(userToken) {
+	case !s.ValidateToken(userToken):
 		s.Log.Info("Twitch user token failed validation, regenerating")
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "refresh_invalid"))
 		telemetry.IncrementTokenValidationTotal(ctx, "user", false)
-		if _, err := s.refreshAndStoreUserToken(); err != nil {
+		if err := s.refreshAndStoreUserToken(); err != nil {
 			s.Log.Error("Background renewal: failed to regenerate user token", err)
 			telemetry.RecordError(span, err)
 		}
-	} else {
+	default:
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "still_valid"))
 		telemetry.IncrementTokenValidationTotal(ctx, "user", true)
 	}

@@ -35,11 +35,11 @@ type Subscription struct {
 // NewSubscription creates a new subscription
 func NewSubscription(secretService *secrets.SecretService) *Subscription {
 	log := telemetry.NewLogger("subscriptions")
-	cache := cache.NewCacheService()
+	cacheService := cache.NewCacheService()
 	return &Subscription{
 		Secrets: secretService,
 		Log:     log,
-		Cache:   cache,
+		Cache:   cacheService,
 	}
 }
 

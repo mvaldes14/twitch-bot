@@ -29,11 +29,11 @@ const (
 )
 
 var (
-	errSpotifyNoToken  = errors.New("Failed to produce a new token")
-	errInvalidRequest  = errors.New("Failed to create HTTP request")
+	errSpotifyNoToken  = errors.New("failed to produce a new token")
+	errInvalidRequest  = errors.New("failed to create HTTP request")
 	errHTTPRequest     = errors.New("HTTP request failed")
-	errResponseParsing = errors.New("Failed to parse response")
-	errInvalidURL      = errors.New("Invalid URL to add to Spotify Playlist")
+	errResponseParsing = errors.New("failed to parse response")
+	errInvalidURL      = errors.New("invalid URL to add to Spotify playlist")
 )
 
 // Spotify struct for spotify
@@ -47,14 +47,14 @@ type Spotify struct {
 // NewSpotify creates a new spotify instance
 func NewSpotify() *Spotify {
 	logger := telemetry.NewLogger("spotify")
-	cache := cache.NewCacheService()
+	cacheService := cache.NewCacheService()
 	playlistID := os.Getenv("SPOTIFY_PLAYLIST_ID")
 	if playlistID == "" {
 		playlistID = defaultPlaylistID
 	}
 	return &Spotify{
 		Log:        logger,
-		Cache:      cache,
+		Cache:      cacheService,
 		PlaylistID: playlistID,
 		httpClient: &http.Client{Timeout: requestTimeout},
 	}

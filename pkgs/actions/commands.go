@@ -38,12 +38,12 @@ type Actions struct {
 }
 
 // NewActions creates a new Actions instance
-func NewActions(secrets *secrets.SecretService) *Actions {
+func NewActions(secretService *secrets.SecretService) *Actions {
 	logger := telemetry.NewLogger("actions")
 	spotifyClient := spotify.NewSpotify()
 	return &Actions{
 		Log:     logger,
-		Secrets: secrets,
+		Secrets: secretService,
 		Spotify: spotifyClient,
 	}
 }
@@ -245,7 +245,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			telemetry.RecordError(span, err)
 			return
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		telemetry.SetSpanStatus(span, res.StatusCode)
 

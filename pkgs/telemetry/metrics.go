@@ -30,10 +30,10 @@ var (
 	ChatMessageCount metric.Int64Counter
 
 	// Token lifecycle metrics
-	TokenRefreshTotal     metric.Int64Counter
-	TokenRefreshOn401     metric.Int64Counter
-	TokenValidationTotal  metric.Int64Counter
-	TokenTTLSeconds       metric.Float64Gauge
+	TokenRefreshTotal    metric.Int64Counter
+	TokenRefreshOn401    metric.Int64Counter
+	TokenValidationTotal metric.Int64Counter
+	TokenTTLSeconds      metric.Float64Gauge
 
 	// Cache metrics
 	CacheOperationTotal metric.Int64Counter
@@ -197,57 +197,63 @@ func InitMetrics() error {
 	return nil
 }
 
-// Helper functions to simplify metric recording
+// IncrementSubscriptionCount records a new subscription event.
 func IncrementSubscriptionCount(ctx context.Context) {
 	if SubscriptionCount != nil {
 		SubscriptionCount.Add(ctx, 1)
 	}
 }
 
+// IncrementRewardCount records a channel point reward redemption.
 func IncrementRewardCount(ctx context.Context) {
 	if RewardCount != nil {
 		RewardCount.Add(ctx, 1)
 	}
 }
 
+// IncrementFollowCount records a new follower event.
 func IncrementFollowCount(ctx context.Context) {
 	if FollowCount != nil {
 		FollowCount.Add(ctx, 1)
 	}
 }
 
+// IncrementCheerCount records a cheer/bits event.
 func IncrementCheerCount(ctx context.Context) {
 	if CheerCount != nil {
 		CheerCount.Add(ctx, 1)
 	}
 }
 
+// IncrementAPICallCount records an API call.
 func IncrementAPICallCount(ctx context.Context) {
 	if APICallCount != nil {
 		APICallCount.Add(ctx, 1)
 	}
 }
 
+// RecordStreamDuration records the duration of a stream in seconds.
 func RecordStreamDuration(ctx context.Context, duration float64) {
 	if StreamDuration != nil {
 		StreamDuration.Record(ctx, duration)
 	}
 }
 
+// IncrementSpotifySongChanged records a Spotify song change event.
 func IncrementSpotifySongChanged(ctx context.Context) {
 	if SpotifySongChanged != nil {
 		SpotifySongChanged.Add(ctx, 1)
 	}
 }
 
+// IncrementChatMessageCount records a chat message.
 func IncrementChatMessageCount(ctx context.Context) {
 	if ChatMessageCount != nil {
 		ChatMessageCount.Add(ctx, 1)
 	}
 }
 
-// Token lifecycle helpers
-
+// IncrementTokenRefreshTotal records a token refresh attempt with type and result labels.
 func IncrementTokenRefreshTotal(ctx context.Context, tokenType, result string) {
 	if TokenRefreshTotal != nil {
 		TokenRefreshTotal.Add(ctx, 1,
@@ -259,6 +265,7 @@ func IncrementTokenRefreshTotal(ctx context.Context, tokenType, result string) {
 	}
 }
 
+// IncrementTokenRefreshOn401 records a token refresh triggered by a 401 response.
 func IncrementTokenRefreshOn401(ctx context.Context, operation string) {
 	if TokenRefreshOn401 != nil {
 		TokenRefreshOn401.Add(ctx, 1,
@@ -269,6 +276,7 @@ func IncrementTokenRefreshOn401(ctx context.Context, operation string) {
 	}
 }
 
+// IncrementTokenValidationTotal records a token validation check with type and validity labels.
 func IncrementTokenValidationTotal(ctx context.Context, tokenType string, valid bool) {
 	if TokenValidationTotal != nil {
 		TokenValidationTotal.Add(ctx, 1,
@@ -280,6 +288,7 @@ func IncrementTokenValidationTotal(ctx context.Context, tokenType string, valid 
 	}
 }
 
+// RecordTokenTTL records the remaining TTL of a token in seconds.
 func RecordTokenTTL(ctx context.Context, tokenType string, ttlSeconds float64) {
 	if TokenTTLSeconds != nil {
 		TokenTTLSeconds.Record(ctx, ttlSeconds,
@@ -290,8 +299,7 @@ func RecordTokenTTL(ctx context.Context, tokenType string, ttlSeconds float64) {
 	}
 }
 
-// Cache helpers
-
+// IncrementCacheOperation records a Redis cache operation with operation type and result labels.
 func IncrementCacheOperation(ctx context.Context, operation, result string) {
 	if CacheOperationTotal != nil {
 		CacheOperationTotal.Add(ctx, 1,
@@ -303,8 +311,7 @@ func IncrementCacheOperation(ctx context.Context, operation, result string) {
 	}
 }
 
-// Command and message helpers
-
+// IncrementCommandExecuted records a chat command execution with the command name label.
 func IncrementCommandExecuted(ctx context.Context, command string) {
 	if CommandExecutedTotal != nil {
 		CommandExecutedTotal.Add(ctx, 1,
@@ -315,6 +322,7 @@ func IncrementCommandExecuted(ctx context.Context, command string) {
 	}
 }
 
+// IncrementMessageSent records a Twitch chat message send attempt with result label.
 func IncrementMessageSent(ctx context.Context, result string) {
 	if MessageSentTotal != nil {
 		MessageSentTotal.Add(ctx, 1,
@@ -325,8 +333,7 @@ func IncrementMessageSent(ctx context.Context, result string) {
 	}
 }
 
-// Notification helpers
-
+// IncrementNotificationSent records a notification delivery attempt with service and result labels.
 func IncrementNotificationSent(ctx context.Context, service, result string) {
 	if NotificationSentTotal != nil {
 		NotificationSentTotal.Add(ctx, 1,
@@ -338,8 +345,7 @@ func IncrementNotificationSent(ctx context.Context, service, result string) {
 	}
 }
 
-// Spotify operation helpers
-
+// IncrementSpotifyOperation records a Spotify API operation with operation type and result labels.
 func IncrementSpotifyOperation(ctx context.Context, operation, result string) {
 	if SpotifyOperationTotal != nil {
 		SpotifyOperationTotal.Add(ctx, 1,
