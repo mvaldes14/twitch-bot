@@ -69,18 +69,19 @@ linters:
         - sprintfQuotedString
         - deferInLoop
 
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+      # Allow unused parameters in interface implementations
+      - text: "unused-parameter"
+        linters:
+          - revive
+
 issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-
-    # Allow unused parameters in interface implementations
-    - text: "unused-parameter"
-      linters:
-        - revive
-
   max-issues-per-linter: 0
   max-same-issues: 0
