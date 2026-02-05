@@ -170,6 +170,7 @@ func (s *SecretService) GenerateUserToken() (string, int, error) {
 	twitchSecretVal := os.Getenv(twitchSecret)
 	if twitchID == "" || twitchSecretVal == "" {
 		telemetry.RecordError(span, errMissingTokenOrID)
+		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
 		return "", 0, errMissingTokenOrID
 	}
 	payload := fmt.Sprintf("client_id=%v&client_secret=%v&grant_type=client_credentials", twitchID, twitchSecretVal)
@@ -186,11 +187,13 @@ func (s *SecretService) GenerateUserToken() (string, int, error) {
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
 		s.Log.Error("Failed to make request generating user token", err)
 		telemetry.RecordError(span, err)
+		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
 		return "", 0, fmt.Errorf("generate user token request failed: %w", err)
 	}
 	if response.AccessToken == "" {
 		emptyErr := fmt.Errorf("generate user token returned empty access token")
 		telemetry.RecordError(span, emptyErr)
+		telemetry.IncrementTokenRefreshTotal(ctx, "user", "error")
 		return "", 0, emptyErr
 	}
 
@@ -200,6 +203,8 @@ func (s *SecretService) GenerateUserToken() (string, int, error) {
 	}
 
 	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
+	telemetry.IncrementTokenRefreshTotal(ctx, "user", "success")
+	telemetry.RecordTokenTTL(ctx, "user", float64(expiresIn))
 	return response.AccessToken, expiresIn, nil
 }
 
@@ -233,11 +238,13 @@ func (s *SecretService) RefreshAppToken() (string, int, error) {
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
 		s.Log.Error("Failed to make request refreshing token", err)
 		telemetry.RecordError(span, err)
+		telemetry.IncrementTokenRefreshTotal(ctx, "app", "error")
 		return "", 0, fmt.Errorf("refresh app token request failed: %w", err)
 	}
 	if response.AccessToken == "" {
 		emptyErr := fmt.Errorf("refresh app token returned empty access token")
 		telemetry.RecordError(span, emptyErr)
+		telemetry.IncrementTokenRefreshTotal(ctx, "app", "error")
 		return "", 0, emptyErr
 	}
 
@@ -260,6 +267,8 @@ func (s *SecretService) RefreshAppToken() (string, int, error) {
 	}
 
 	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
+	telemetry.IncrementTokenRefreshTotal(ctx, "app", "success")
+	telemetry.RecordTokenTTL(ctx, "app", float64(expiresIn))
 	return response.AccessToken, expiresIn, nil
 }
 
@@ -381,9 +390,11 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 	if t.AccessToken == "" {
 		s.Log.Error("Received empty access token", errSpotifyNoToken)
 		telemetry.RecordError(span, errSpotifyNoToken)
+		telemetry.IncrementTokenRefreshTotal(ctx, "spotify", "error")
 		return "", errSpotifyNoToken
 	}
 
+	telemetry.IncrementTokenRefreshTotal(ctx, "spotify", "success")
 	return t.AccessToken, nil
 }
 
@@ -516,12 +527,14 @@ func (s *SecretService) renewTokens() {
 	} else if !s.ValidateToken(appToken) {
 		s.Log.Info("Twitch app token failed validation, refreshing")
 		telemetry.AddSpanAttributes(span, attribute.String("app_token.action", "refresh_invalid"))
+		telemetry.IncrementTokenValidationTotal(ctx, "app", false)
 		if _, err := s.refreshAndStoreAppToken(); err != nil {
 			s.Log.Error("Background renewal: failed to refresh app token", err)
 			telemetry.RecordError(span, err)
 		}
 	} else {
 		telemetry.AddSpanAttributes(span, attribute.String("app_token.action", "still_valid"))
+		telemetry.IncrementTokenValidationTotal(ctx, "app", true)
 	}
 
 	// Twitch User Token — expires every ~60 days
@@ -536,12 +549,14 @@ func (s *SecretService) renewTokens() {
 	} else if !s.ValidateToken(userToken) {
 		s.Log.Info("Twitch user token failed validation, regenerating")
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "refresh_invalid"))
+		telemetry.IncrementTokenValidationTotal(ctx, "user", false)
 		if _, err := s.refreshAndStoreUserToken(); err != nil {
 			s.Log.Error("Background renewal: failed to regenerate user token", err)
 			telemetry.RecordError(span, err)
 		}
 	} else {
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "still_valid"))
+		telemetry.IncrementTokenValidationTotal(ctx, "user", true)
 	}
 
 	// Spotify Token — expires every hour

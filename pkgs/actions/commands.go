@@ -50,27 +50,37 @@ func NewActions(secrets *secrets.SecretService) *Actions {
 
 // ParseMessage Parses the incoming messages from stream
 func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
+	ctx := context.Background()
 	payload := fmt.Sprintf("%s: %s", msg.Event.ChatterUserName, msg.Event.Message.Text)
 	a.Log.Chat(payload)
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
+		telemetry.IncrementCommandExecuted(ctx, "commands")
 		_ = a.SendMessage("!github, !dotfiles, !song, !social, !blog, !youtube ")
 	case "!github":
+		telemetry.IncrementCommandExecuted(ctx, "github")
 		_ = a.SendMessage("https://links.mvaldes.dev/gh")
 	case "!dotfiles":
+		telemetry.IncrementCommandExecuted(ctx, "dotfiles")
 		_ = a.SendMessage("https://links.mvaldes.dev/dotfiles")
 	case "!test":
+		telemetry.IncrementCommandExecuted(ctx, "test")
 		_ = a.SendMessage("Test Me")
 	case "!social":
+		telemetry.IncrementCommandExecuted(ctx, "social")
 		_ = a.SendMessage("https://links.mvaldes.dev/twitter")
 	case "!blog":
+		telemetry.IncrementCommandExecuted(ctx, "blog")
 		_ = a.SendMessage("https://mvaldes.dev")
 	case "!discord":
+		telemetry.IncrementCommandExecuted(ctx, "discord")
 		_ = a.SendMessage("https://links.mvaldes.dev/discord")
 	case "!youtube":
+		telemetry.IncrementCommandExecuted(ctx, "youtube")
 		_ = a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
+		telemetry.IncrementCommandExecuted(ctx, "song")
 		song, err := a.Spotify.GetSong()
 		if err != nil {
 			a.Log.Error("Failed to get current song", err)
@@ -87,6 +97,7 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
+		telemetry.IncrementCommandExecuted(ctx, "today")
 		a.Log.Info("Today command running")
 		a.updateChannel(msg)
 	}
@@ -101,6 +112,7 @@ func (a *Actions) SendMessage(text string) error {
 
 	err := a.sendMessageInternal(ctx, text)
 	if err == nil {
+		telemetry.IncrementMessageSent(ctx, "success")
 		return nil
 	}
 
@@ -108,19 +120,25 @@ func (a *Actions) SendMessage(text string) error {
 	if errors.Is(err, errUnauthorized) {
 		a.Log.Info("Got 401 sending message, refreshing app token and retrying")
 		telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
+		telemetry.IncrementTokenRefreshOn401(ctx, "send_message")
 		if refreshErr := a.Secrets.RefreshAppTokenAndStore(); refreshErr != nil {
 			a.Log.Error("Failed to refresh app token after 401", refreshErr)
 			telemetry.RecordError(span, refreshErr)
+			telemetry.IncrementMessageSent(ctx, "error")
 			return err
 		}
 		retryErr := a.sendMessageInternal(ctx, text)
 		if retryErr != nil {
 			telemetry.RecordError(span, retryErr)
+			telemetry.IncrementMessageSent(ctx, "error")
+		} else {
+			telemetry.IncrementMessageSent(ctx, "success")
 		}
 		return retryErr
 	}
 
 	telemetry.RecordError(span, err)
+	telemetry.IncrementMessageSent(ctx, "error")
 	return err
 }
 
@@ -239,6 +257,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		if res.StatusCode == http.StatusUnauthorized && attempt == 0 {
 			a.Log.Info("Got 401 updating channel, refreshing user token and retrying")
 			telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
+			telemetry.IncrementTokenRefreshOn401(ctx, "update_channel")
 			if refreshErr := a.Secrets.RefreshUserTokenAndStore(); refreshErr != nil {
 				a.Log.Error("Failed to refresh user token after 401", refreshErr)
 				telemetry.RecordError(span, refreshErr)

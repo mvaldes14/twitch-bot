@@ -64,19 +64,23 @@ func (c *Service) GetToken(key string) (string, error) {
 	if errors.Is(err, redis.Nil) {
 		c.Log.Error("Token not found in Redis", errorNoToken)
 		telemetry.RecordError(span, errorNoToken)
+		telemetry.IncrementCacheOperation(ctx, "get", "miss")
 		return "", err
 	}
 	if err != nil {
 		c.Log.Error("Error retrieving token from Redis", err)
 		telemetry.RecordError(span, err)
+		telemetry.IncrementCacheOperation(ctx, "get", "error")
 		return "", err
 	}
 	var token Token
 	if err := json.Unmarshal([]byte(val), &token); err != nil {
 		c.Log.Error("Failed to unmarshal token", err)
 		telemetry.RecordError(span, err)
+		telemetry.IncrementCacheOperation(ctx, "get", "error")
 		return "", err
 	}
+	telemetry.IncrementCacheOperation(ctx, "get", "hit")
 	return token.Value, nil
 }
 
@@ -98,8 +102,10 @@ func (c *Service) StoreToken(tk Token) error {
 	if err := rdb.Set(ctx, tk.Key, jsonToken, tk.Expiration).Err(); err != nil {
 		c.Log.Error("Failed to store token in Redis", err)
 		telemetry.RecordError(span, err)
+		telemetry.IncrementCacheOperation(ctx, "store", "error")
 		return err
 	}
+	telemetry.IncrementCacheOperation(ctx, "store", "success")
 	c.Log.Info("Token stored successfully", tk.Key)
 	return nil
 }
@@ -115,8 +121,10 @@ func (c *Service) DeleteToken(key string) error {
 	if err := rdb.Del(ctx, key).Err(); err != nil {
 		c.Log.Error("Failed to delete token from Redis", err)
 		telemetry.RecordError(span, err)
+		telemetry.IncrementCacheOperation(ctx, "delete", "error")
 		return err
 	}
+	telemetry.IncrementCacheOperation(ctx, "delete", "success")
 	c.Log.Info("Token deleted successfully", key)
 	return nil
 }

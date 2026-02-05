@@ -321,6 +321,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 
 // SubHandler responds to subscription events
 func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.IncrementSubscriptionCount(r.Context())
 	var subEventResponse subscriptions.SubscriptionEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
