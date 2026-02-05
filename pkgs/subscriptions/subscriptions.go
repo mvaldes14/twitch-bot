@@ -70,8 +70,36 @@ func (s *Subscription) CreateSubscription(payload string) error {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	s.Log.Info("Subscription created for: " + payload)
-	return nil
+
+	// Read response body for error details
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		s.Log.Error("Error reading response body for subscription creation", err)
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check if the subscription was created successfully
+	if resp.StatusCode != http.StatusCreated {
+		s.Log.Error(fmt.Sprintf("Failed to create subscription - Status: %d, Response: %s", resp.StatusCode, string(body)), nil)
+		return fmt.Errorf("failed to create subscription: status code %d", resp.StatusCode)
+	}
+
+	// Unmarshal response to get subscription details
+	var subscriptionResponse ValidateSubscription
+	if err := json.Unmarshal(body, &subscriptionResponse); err != nil {
+		s.Log.Error("Error unmarshalling subscription response", err)
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	// Verify subscription was actually created
+	if subscriptionResponse.Total > 0 && len(subscriptionResponse.Data) > 0 {
+		createdSub := subscriptionResponse.Data[0]
+		s.Log.Info(fmt.Sprintf("Subscription created successfully - ID: %s, Type: %s, Status: %s", createdSub.ID, createdSub.Type, createdSub.Status))
+		return nil
+	}
+
+	s.Log.Error("Subscription response received but no subscription data found", errors.New("empty subscription data"))
+	return errors.New("no subscription data in response")
 }
 
 // GetSubscriptions Retrieves all subscriptions for the application
@@ -96,6 +124,14 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 		return ValidateSubscription{}, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Check response status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		s.Log.Error(fmt.Sprintf("Failed to get subscriptions - Status: %d, Response: %s", resp.StatusCode, string(body)), nil)
+		return ValidateSubscription{}, fmt.Errorf("failed to get subscriptions: status code %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		s.Log.Error("Error reading response body:", err)
@@ -107,6 +143,13 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 		s.Log.Error("Error unmarshalling response:", err)
 		return ValidateSubscription{}, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	// Log subscription details
+	s.Log.Info(fmt.Sprintf("Retrieved %d subscriptions (Total Cost: %d/%d)", subscriptionList.Total, subscriptionList.TotalCost, subscriptionList.MaxTotalCost))
+	for _, sub := range subscriptionList.Data {
+		s.Log.Info(fmt.Sprintf("  - ID: %s, Type: %s, Status: %s, Version: %s, Cost: %d", sub.ID, sub.Type, sub.Status, sub.Version, sub.Cost))
+	}
+
 	return subscriptionList, nil
 }
 

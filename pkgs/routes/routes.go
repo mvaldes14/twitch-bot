@@ -143,20 +143,42 @@ func (rw *responseWriter) WriteHeader(code int) {
 // HANDLERS
 // respondToChallenge responds to challenge for a subscription on twitch eventsub
 func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
+	_, span := telemetry.StartSpan(r.Context(), "eventsub_challenge_verification")
+	defer span.End()
+
 	rt.Log.Info("Responding to challenge")
 	var challengeResponse subscriptions.SubscribeEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read challenge request body", err)
+		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
+
 	if err := json.Unmarshal(body, &challengeResponse); err != nil {
 		rt.Log.Error("Failed to unmarshal challenge response", err)
+		telemetry.RecordError(span, err)
+		telemetry.AddSpanAttributes(span,
+			attribute.String("challenge.status", "unmarshal_failed"),
+		)
 		return
 	}
+
+	telemetry.AddSpanAttributes(span,
+		attribute.String("challenge.subscription_id", challengeResponse.Subscription.ID),
+		attribute.String("challenge.subscription_type", challengeResponse.Subscription.Type),
+		attribute.String("challenge.subscription_version", challengeResponse.Subscription.Version),
+		attribute.String("challenge.subscription_status", challengeResponse.Subscription.Status),
+	)
+
 	w.Header().Add("Content-Type", "plain/text")
 	_, _ = w.Write([]byte(challengeResponse.Challenge))
-	rt.Log.Info("Response sent to challenge")
+
+	rt.Log.Info(fmt.Sprintf("Challenge response sent - Subscription ID: %s, Type: %s", challengeResponse.Subscription.ID, challengeResponse.Subscription.Type))
+	telemetry.AddSpanAttributes(span,
+		attribute.String("challenge.status", "success"),
+	)
 }
 
 // DeleteHandler deletes all subscriptions
@@ -164,12 +186,15 @@ func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList, err := rt.Subs.GetSubscriptions()
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	err = rt.Subs.DeleteSubscriptions(subsList)
 	if err != nil {
 		rt.Log.Error("Could not delete subscriptions", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	rt.Log.Info("Deleted all subscriptions")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -200,17 +225,29 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 
 // CreateHandler creates a subscription based on the parameter
 func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
+	_, span := telemetry.StartSpan(r.Context(), "create_subscription")
+	defer span.End()
+
 	requestType, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Could not parse payload", err)
+		telemetry.RecordError(span, err)
 		http.Error(w, "Could not parse payload", http.StatusInternalServerError)
 		return
 	}
 	defer r.Body.Close()
+
 	var requestTypeString SubscriptionTypeRequest
 	if err = json.Unmarshal(requestType, &requestTypeString); err != nil {
+		rt.Log.Error("Could not unmarshal payload", err)
+		telemetry.RecordError(span, err)
 		http.Error(w, "Could not unmarshal payload", http.StatusBadRequest)
 		return
 	}
+
+	telemetry.AddSpanAttributes(span,
+		attribute.String("subscription.type_requested", requestTypeString.Type),
+	)
 
 	subscriptionTypes := map[string]subscriptions.SubscriptionType{
 		"chat": {
@@ -249,16 +286,38 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 			Type:    "stream.offline",
 		},
 	}
+
 	if subTypeConfig, ok := subscriptionTypes[requestTypeString.Type]; ok {
+		telemetry.AddSpanAttributes(span,
+			attribute.String("subscription.config_name", subTypeConfig.Name),
+			attribute.String("subscription.config_version", subTypeConfig.Version),
+			attribute.String("subscription.config_type", subTypeConfig.Type),
+		)
+
 		payload := rt.GeneratePayload(subTypeConfig)
+		rt.Log.Info("Creating subscription for type: " + requestTypeString.Type)
+
 		if err := rt.Subs.CreateSubscription(payload); err != nil {
 			rt.Log.Error("Failed to create subscription", err)
+			telemetry.RecordError(span, err)
+			telemetry.AddSpanAttributes(span,
+				attribute.String("subscription.status", "failed"),
+			)
 			http.Error(w, "Failed to create subscription", http.StatusInternalServerError)
 			return
 		}
-		rt.Log.Info("Subscription created: " + requestTypeString.Type)
+
+		rt.Log.Info("Subscription created successfully: " + requestTypeString.Type)
+		telemetry.AddSpanAttributes(span,
+			attribute.String("subscription.status", "success"),
+		)
+		w.WriteHeader(http.StatusOK)
 	} else {
-		rt.Log.Error("Invalid subscription", errorInvalidSbuscription)
+		rt.Log.Error("Invalid subscription type requested: "+requestTypeString.Type, errorInvalidSbuscription)
+		telemetry.RecordError(span, errorInvalidSbuscription)
+		telemetry.AddSpanAttributes(span,
+			attribute.String("subscription.status", "invalid_type"),
+		)
 		http.Error(w, "Invalid subscription type", http.StatusBadRequest)
 	}
 }
