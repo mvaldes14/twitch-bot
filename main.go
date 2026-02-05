@@ -46,6 +46,10 @@ func main() {
 	s := secrets.NewSecretService()
 	s.InitSecrets()
 
+	// Start background token renewal (cancelled on shutdown)
+	renewCtx, renewCancel := context.WithCancel(ctx)
+	s.StartTokenRenewal(renewCtx)
+
 	logger.Info("Starting server on port" + port)
 	srv := server.NewServer(port)
 
@@ -63,6 +67,9 @@ func main() {
 	// Wait for interrupt signal
 	<-stop
 	logger.Info("Shutting down server gracefully...")
+
+	// Stop the token renewal goroutine
+	renewCancel()
 
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

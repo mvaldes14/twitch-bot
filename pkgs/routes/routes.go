@@ -26,10 +26,10 @@ const (
 )
 
 var (
-	errorTokenNotFound       = errors.New("Token not found for API protected routes")
-	errorTokenNotValid       = errors.New("Token not valid for API protected routes")
-	errorInvalidSbuscription = errors.New("Could not generate a valid subscription")
-	errorNoMusicPlaying      = errors.New("Nothing is playing on spotify")
+	errorTokenNotFound       = errors.New("token not found for API protected routes")
+	errorTokenNotValid       = errors.New("token not valid for API protected routes")
+	errorInvalidSbuscription = errors.New("could not generate a valid subscription")
+	errorNoMusicPlaying      = errors.New("nothing is playing on spotify")
 )
 
 // RequestJSON represents a JSON HTTP request
@@ -66,19 +66,19 @@ type SubscriptionTypeRequest struct {
 
 // NewRouter creates a new router
 func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
-	actions := actions.NewActions(secretService)
-	spotify := spotify.NewSpotify()
+	actionsService := actions.NewActions(secretService)
+	spotifyClient := spotify.NewSpotify()
 	notify := notifications.NewNotificationService()
 	logger := telemetry.NewLogger("router")
-	cache := cache.NewCacheService()
+	cacheService := cache.NewCacheService()
 	return &Router{
 		Log:          logger,
 		Subs:         subs,
 		Secrets:      secretService,
-		Actions:      actions,
-		Spotify:      spotify,
+		Actions:      actionsService,
+		Spotify:      spotifyClient,
 		Notification: notify,
-		Cache:        cache,
+		Cache:        cacheService,
 	}
 }
 
@@ -321,6 +321,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 
 // SubHandler responds to subscription events
 func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
+	telemetry.IncrementSubscriptionCount(r.Context())
 	var subEventResponse subscriptions.SubscriptionEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

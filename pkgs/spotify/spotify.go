@@ -29,11 +29,11 @@ const (
 )
 
 var (
-	errSpotifyNoToken  = errors.New("Failed to produce a new token")
-	errInvalidRequest  = errors.New("Failed to create HTTP request")
+	errSpotifyNoToken  = errors.New("failed to produce a new token")
+	errInvalidRequest  = errors.New("failed to create HTTP request")
 	errHTTPRequest     = errors.New("HTTP request failed")
-	errResponseParsing = errors.New("Failed to parse response")
-	errInvalidURL      = errors.New("Invalid URL to add to Spotify Playlist")
+	errResponseParsing = errors.New("failed to parse response")
+	errInvalidURL      = errors.New("invalid URL to add to Spotify playlist")
 )
 
 // Spotify struct for spotify
@@ -47,14 +47,14 @@ type Spotify struct {
 // NewSpotify creates a new spotify instance
 func NewSpotify() *Spotify {
 	logger := telemetry.NewLogger("spotify")
-	cache := cache.NewCacheService()
+	cacheService := cache.NewCacheService()
 	playlistID := os.Getenv("SPOTIFY_PLAYLIST_ID")
 	if playlistID == "" {
 		playlistID = defaultPlaylistID
 	}
 	return &Spotify{
 		Log:        logger,
-		Cache:      cache,
+		Cache:      cacheService,
 		PlaylistID: playlistID,
 		httpClient: &http.Client{Timeout: requestTimeout},
 	}
@@ -106,13 +106,16 @@ func (s *Spotify) NextSong() error {
 	switch res.StatusCode {
 	case http.StatusNoContent:
 		s.Log.Info("Song changed")
+		telemetry.IncrementSpotifyOperation(ctx, "next_song", "success")
 		return nil
 	case http.StatusUnauthorized:
 		s.Log.Info("Token unauthorized, clearing cache")
 		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		telemetry.IncrementSpotifyOperation(ctx, "next_song", "unauthorized")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
 		s.Log.Error("Unexpected response status", fmt.Errorf("status: %d", res.StatusCode))
+		telemetry.IncrementSpotifyOperation(ctx, "next_song", "error")
 		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 }
@@ -143,24 +146,29 @@ func (s *Spotify) GetSong() (SpotifyCurrentlyPlaying, error) {
 
 	if res.StatusCode == http.StatusUnauthorized {
 		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		telemetry.IncrementSpotifyOperation(ctx, "get_song", "unauthorized")
 		return currentlyPlaying, fmt.Errorf("unauthorized: token may be expired")
 	}
 
 	if res.StatusCode != http.StatusOK {
+		telemetry.IncrementSpotifyOperation(ctx, "get_song", "error")
 		return currentlyPlaying, fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		s.Log.Error("Error reading response body", err)
+		telemetry.IncrementSpotifyOperation(ctx, "get_song", "error")
 		return currentlyPlaying, errResponseParsing
 	}
 
 	if err = json.Unmarshal(body, &currentlyPlaying); err != nil {
 		s.Log.Error("Error unmarshalling song response", err)
+		telemetry.IncrementSpotifyOperation(ctx, "get_song", "error")
 		return currentlyPlaying, errResponseParsing
 	}
 
+	telemetry.IncrementSpotifyOperation(ctx, "get_song", "success")
 	return currentlyPlaying, nil
 }
 
@@ -237,13 +245,16 @@ func (s *Spotify) AddToPlaylist(song string) error {
 	switch res.StatusCode {
 	case http.StatusCreated, http.StatusOK:
 		s.Log.Info("Successfully added song to playlist")
+		telemetry.IncrementSpotifyOperation(ctx, "add_to_playlist", "success")
 		return nil
 	case http.StatusUnauthorized:
 		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		telemetry.IncrementSpotifyOperation(ctx, "add_to_playlist", "unauthorized")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
 		respBody, _ := io.ReadAll(res.Body)
 		s.Log.Error("Unexpected response status", fmt.Errorf("status: %d, body: %s", res.StatusCode, string(respBody)))
+		telemetry.IncrementSpotifyOperation(ctx, "add_to_playlist", "error")
 		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 }
@@ -400,13 +411,16 @@ func (s *Spotify) DeleteSongPlaylist() error {
 	switch res.StatusCode {
 	case http.StatusOK:
 		s.Log.Info("Successfully cleared playlist")
+		telemetry.IncrementSpotifyOperation(ctx, "delete_playlist", "success")
 		return nil
 	case http.StatusUnauthorized:
 		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		telemetry.IncrementSpotifyOperation(ctx, "delete_playlist", "unauthorized")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
 		respBody, _ := io.ReadAll(res.Body)
 		s.Log.Error("Unexpected response status", fmt.Errorf("status: %d, body: %s", res.StatusCode, string(respBody)))
+		telemetry.IncrementSpotifyOperation(ctx, "delete_playlist", "error")
 		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 }

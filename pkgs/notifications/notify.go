@@ -20,8 +20,8 @@ const (
 )
 
 var (
-	errMessageDiscord = errors.New("Error sending message to discord")
-	errMessageGotify  = errors.New("Error sending message to gotify")
+	errMessageDiscord = errors.New("error sending message to discord")
+	errMessageGotify  = errors.New("error sending message to gotify")
 )
 
 // NotificationService struct to hold the properties
@@ -56,18 +56,23 @@ func (n *NotificationService) SendNotification(msg string) error {
 	resp, err := n.Client.Do(req)
 	if err != nil {
 		n.Log.Error("Failed to send discord request", err)
+		telemetry.IncrementNotificationSent(ctx, "discord", "error")
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		n.Log.Error("ERROR", errMessageDiscord)
+		telemetry.IncrementNotificationSent(ctx, "discord", "error")
+	} else {
+		telemetry.IncrementNotificationSent(ctx, "discord", "success")
 	}
 
 	n.Log.Info("Sending message to gotify")
 	token := os.Getenv(gotifyAppToken)
 	if token == "" {
 		n.Log.Error("Gotify token not set", errMessageGotify)
+		telemetry.IncrementNotificationSent(ctx, "gotify", "error")
 		return errMessageGotify
 	}
 	var body bytes.Buffer
@@ -90,13 +95,16 @@ func (n *NotificationService) SendNotification(msg string) error {
 
 	resp, err = n.Client.Do(req)
 	if err != nil {
+		telemetry.IncrementNotificationSent(ctx, "gotify", "error")
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		n.Log.Error("Error sending message to gotify", errMessageGotify)
+		telemetry.IncrementNotificationSent(ctx, "gotify", "error")
 		return errMessageGotify
 	}
+	telemetry.IncrementNotificationSent(ctx, "gotify", "success")
 	n.Log.Info("Sent message to gotify with status code", resp.StatusCode)
 	return nil
 }

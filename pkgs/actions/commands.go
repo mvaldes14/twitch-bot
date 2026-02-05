@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -27,6 +27,7 @@ const (
 
 var (
 	errUpdateChannel = errors.New("updating channel info")
+	errUnauthorized  = errors.New("401 unauthorized: token expired")
 )
 
 // Actions handles all Twitch chat actions and commands
@@ -37,39 +38,49 @@ type Actions struct {
 }
 
 // NewActions creates a new Actions instance
-func NewActions(secrets *secrets.SecretService) *Actions {
+func NewActions(secretService *secrets.SecretService) *Actions {
 	logger := telemetry.NewLogger("actions")
 	spotifyClient := spotify.NewSpotify()
 	return &Actions{
 		Log:     logger,
-		Secrets: secrets,
+		Secrets: secretService,
 		Spotify: spotifyClient,
 	}
 }
 
 // ParseMessage Parses the incoming messages from stream
 func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
+	ctx := context.Background()
 	payload := fmt.Sprintf("%s: %s", msg.Event.ChatterUserName, msg.Event.Message.Text)
 	a.Log.Chat(payload)
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
+		telemetry.IncrementCommandExecuted(ctx, "commands")
 		_ = a.SendMessage("!github, !dotfiles, !song, !social, !blog, !youtube ")
 	case "!github":
+		telemetry.IncrementCommandExecuted(ctx, "github")
 		_ = a.SendMessage("https://links.mvaldes.dev/gh")
 	case "!dotfiles":
+		telemetry.IncrementCommandExecuted(ctx, "dotfiles")
 		_ = a.SendMessage("https://links.mvaldes.dev/dotfiles")
 	case "!test":
+		telemetry.IncrementCommandExecuted(ctx, "test")
 		_ = a.SendMessage("Test Me")
 	case "!social":
+		telemetry.IncrementCommandExecuted(ctx, "social")
 		_ = a.SendMessage("https://links.mvaldes.dev/twitter")
 	case "!blog":
+		telemetry.IncrementCommandExecuted(ctx, "blog")
 		_ = a.SendMessage("https://mvaldes.dev")
 	case "!discord":
+		telemetry.IncrementCommandExecuted(ctx, "discord")
 		_ = a.SendMessage("https://links.mvaldes.dev/discord")
 	case "!youtube":
+		telemetry.IncrementCommandExecuted(ctx, "youtube")
 		_ = a.SendMessage("https://links.mvaldes.dev/youtube")
 	case "!song":
+		telemetry.IncrementCommandExecuted(ctx, "song")
 		song, err := a.Spotify.GetSong()
 		if err != nil {
 			a.Log.Error("Failed to get current song", err)
@@ -86,14 +97,52 @@ func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
+		telemetry.IncrementCommandExecuted(ctx, "today")
 		a.Log.Info("Today command running")
 		a.updateChannel(msg)
 	}
 }
 
-// SendMessage sends a message to the Twitch chat room
+// SendMessage sends a message to the Twitch chat room.
+// On 401 Unauthorized, it triggers a token refresh and retries once.
 func (a *Actions) SendMessage(text string) error {
 	ctx := context.Background()
+	_, span := telemetry.StartExternalSpan(ctx, "twitch.send_message", "twitch", "send_message")
+	defer span.End()
+
+	err := a.sendMessageInternal(ctx, text)
+	if err == nil {
+		telemetry.IncrementMessageSent(ctx, "success")
+		return nil
+	}
+
+	// If we got a 401, refresh the token and retry once
+	if errors.Is(err, errUnauthorized) {
+		a.Log.Info("Got 401 sending message, refreshing app token and retrying")
+		telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
+		telemetry.IncrementTokenRefreshOn401(ctx, "send_message")
+		if refreshErr := a.Secrets.RefreshAppTokenAndStore(); refreshErr != nil {
+			a.Log.Error("Failed to refresh app token after 401", refreshErr)
+			telemetry.RecordError(span, refreshErr)
+			telemetry.IncrementMessageSent(ctx, "error")
+			return err
+		}
+		retryErr := a.sendMessageInternal(ctx, text)
+		if retryErr != nil {
+			telemetry.RecordError(span, retryErr)
+			telemetry.IncrementMessageSent(ctx, "error")
+		} else {
+			telemetry.IncrementMessageSent(ctx, "success")
+		}
+		return retryErr
+	}
+
+	telemetry.RecordError(span, err)
+	telemetry.IncrementMessageSent(ctx, "error")
+	return err
+}
+
+func (a *Actions) sendMessageInternal(ctx context.Context, text string) error {
 	message := subscriptions.ChatMessage{
 		BroadcasterID: userID,
 		SenderID:      userID,
@@ -129,6 +178,11 @@ func (a *Actions) SendMessage(text string) error {
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode == http.StatusUnauthorized {
+		a.Log.Info("Received 401 Unauthorized while sending message")
+		return errUnauthorized
+	}
+
 	if res.StatusCode != http.StatusOK {
 		a.Log.Info("Unexpected status code while sending message, response: " + strconv.Itoa(res.StatusCode))
 		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
@@ -139,54 +193,88 @@ func (a *Actions) SendMessage(text string) error {
 
 func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 	ctx := context.Background()
+	_, span := telemetry.StartExternalSpan(ctx, "twitch.update_channel", "twitch", "update_channel")
+	defer span.End()
+
 	a.Log.Info("Changing the channel information")
 	// Check if user is me so I can update the channel
-	if action.Event.BroadcasterUserID == userID {
-		// Build the new payload
-		splitMsg := strings.Split(action.Event.Message.Text, " ")
-		msg := strings.Join(splitMsg[1:], " ")
-		payload := fmt.Sprintf(`{
+	if action.Event.BroadcasterUserID != userID {
+		return
+	}
+
+	// Build the new payload
+	splitMsg := strings.Split(action.Event.Message.Text, " ")
+	msg := strings.Join(splitMsg[1:], " ")
+	payloadBody := fmt.Sprintf(`{
       "game_id":"%v",
       "title":"🚨[Devops]🚨- %v",
       "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
       "broadcaster_language":"es"}`,
-			softwareID, msg)
-		a.Log.Info("Today Command Ran")
+		softwareID, msg)
+	a.Log.Info("Today Command Ran")
 
-		// Send request to update channel information
-		req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payload)))
+	const maxAttempts = 2
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payloadBody)))
 		if err != nil {
 			a.Log.Error("Could not form request to update channel info", err)
+			telemetry.RecordError(span, err)
 			return
 		}
 
 		headers, err := a.Secrets.BuildSecretHeaders()
 		if err != nil {
 			a.Log.Error("Failed to build headers to update channel", err)
+			telemetry.RecordError(span, err)
 			return
 		}
-		userToken := os.Getenv("TWITCH_USER_TOKEN")
+		userToken, err := a.Secrets.GetUserToken()
+		if err != nil {
+			a.Log.Error("Failed to get user token from cache", err)
+			telemetry.RecordError(span, err)
+			return
+		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
 
-		const maxRetries = 3
 		client := &http.Client{}
-		for i := 0; i < maxRetries; i++ {
-			res, err := client.Do(req)
-			if err != nil {
-				a.Log.Error("Request could not be sent to update channel", err)
-				return
-			}
-			defer res.Body.Close()
-			if res.StatusCode == http.StatusOK {
-				a.Log.Info("Channel updated successfully")
-				return
-			}
-			if res.StatusCode == http.StatusBadRequest {
-				a.Log.Error("Received a bad request", errUpdateChannel)
-			}
+		res, err := client.Do(req)
+		if err != nil {
+			a.Log.Error("Request could not be sent to update channel", err)
+			telemetry.RecordError(span, err)
+			return
 		}
-		a.Log.Error("Failed to update channel after retries", errUpdateChannel)
+		_ = res.Body.Close()
+
+		telemetry.SetSpanStatus(span, res.StatusCode)
+
+		if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusNoContent {
+			a.Log.Info("Channel updated successfully")
+			return
+		}
+
+		if res.StatusCode == http.StatusUnauthorized && attempt == 0 {
+			a.Log.Info("Got 401 updating channel, refreshing user token and retrying")
+			telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
+			telemetry.IncrementTokenRefreshOn401(ctx, "update_channel")
+			if refreshErr := a.Secrets.RefreshUserTokenAndStore(); refreshErr != nil {
+				a.Log.Error("Failed to refresh user token after 401", refreshErr)
+				telemetry.RecordError(span, refreshErr)
+				return
+			}
+			continue
+		}
+
+		if res.StatusCode == http.StatusBadRequest {
+			a.Log.Error("Received a bad request", errUpdateChannel)
+			telemetry.RecordError(span, errUpdateChannel)
+			return
+		}
+
+		unexpectedErr := fmt.Errorf("unexpected status: %d", res.StatusCode)
+		a.Log.Error("Unexpected status updating channel", unexpectedErr)
+		telemetry.RecordError(span, unexpectedErr)
+		return
 	}
 }
