@@ -83,10 +83,28 @@ The bot uses environment variables for configuration. Required environment varia
 - `TWITCH_USER_TOKEN`: Twitch user token for chat and API access
 - `TWITCH_REFRESH_TOKEN`: Refresh token for token renewal
 
-#### External Services (Optional)
-- `SPOTIFY_TOKEN`: Spotify API token for music integration
-- `DISCORD_WEBHOOK_URL`: Discord webhook for stream notifications
-- `DOPPLER_TOKEN`: Doppler token for secret management
+#### Spotify
+- `SPOTIFY_REFRESH_TOKEN`: Spotify refresh token for token renewal
+- `SPOTIFY_CLIENT_ID`: Spotify OAuth application client ID
+- `SPOTIFY_CLIENT_SECRET`: Spotify OAuth application client secret
+- `SPOTIFY_PLAYLIST_ID`: Target Spotify playlist ID (optional, has a default)
+
+#### Notifications
+- `DISCORD_WEBHOOK`: Discord webhook URL for stream notifications
+- `GOTIFY_APPLICATION_TOKEN`: Gotify application token for push notifications
+
+#### Redis
+- `REDIS_URL`: Redis connection address (e.g. `localhost:6379`) used for token caching and storage
+
+#### OpenTelemetry
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP HTTP endpoint for exporting traces and metrics (required to enable observability)
+- `OTEL_SERVICE_VERSION`: Service version reported in telemetry resource attributes (defaults to `1.0.0`)
+- `OTEL_ENVIRONMENT`: Deployment environment name, e.g. `development` or `production` (defaults to `development`)
+- `OTEL_INSECURE_ENDPOINT`: Set to `true` to disable TLS verification for the OTLP endpoint (defaults to `false`)
+
+#### Other
+- `ADMIN_TOKEN`: Token used to authenticate admin-protected API routes
+- `DOPPLER_TOKEN`: Doppler token for secret management (optional)
 
 #### Development
 The project uses Nix flakes for development environment. Run `direnv allow` to load the environment.
@@ -107,13 +125,14 @@ The project is organized into several packages:
 
 *   [`main.go`](file:///home/mvaldes/git/twitch-bot/main.go): The main entry point of the application.
 *   `pkgs/actions`: Handles bot commands and chat interactions.
-*   `pkgs/discord`: Manages Discord webhook notifications.
+*   `pkgs/notifications`: Manages Discord and Gotify notifications.
 *   `pkgs/routes`: Defines HTTP routes and handlers.
 *   `pkgs/secrets`: Handles secrets management and Doppler integration.
 *   `pkgs/server`: Contains the HTTP server implementation.
 *   `pkgs/spotify`: Integrates with Spotify API for music control.
 *   `pkgs/subscriptions`: Manages Twitch EventSub subscriptions.
-*   `pkgs/telemetry`: Provides logging and Prometheus metrics.
+*   `pkgs/telemetry`: Provides logging, OpenTelemetry tracing, and metrics.
+*   `pkgs/cache`: Redis-based token caching and storage.
 *   `templates`: Stores HTML templates for the web interface.
 
 ## Contributing
@@ -127,9 +146,10 @@ This project is licensed under the MIT License - see the [LICENSE](file:///home/
 ## Credits
 
 - Built with Go 1.22+
-- Uses Prometheus for metrics
+- Uses OpenTelemetry for tracing and metrics
 - Integrates with Twitch EventSub API
 - Supports Spotify Web API
+- Uses Redis for token caching
 - Uses Doppler for secret management
 
 ## Source Code
