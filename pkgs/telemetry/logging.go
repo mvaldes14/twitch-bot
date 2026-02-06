@@ -59,12 +59,9 @@ func parseStructuredLog(msg string) (body string, operation string, status strin
 				operation = tag[:colonIdx]
 				status = tag[colonIdx+2:] // Skip ": "
 				details["tag"] = tag
-				details["operation"] = operation
-				details["status"] = status
 			} else {
 				operation = tag
 				details["tag"] = tag
-				details["operation"] = operation
 			}
 		}
 	}
