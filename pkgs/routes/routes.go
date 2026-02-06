@@ -224,16 +224,25 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
 	if subsList.Total == 0 {
 		rt.Log.Info("No subscriptions found")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"total": 0,
+			"data":  []interface{}{},
+		})
 		return
 	}
-	rt.Log.Info("Current Subscription List: ", subsList.Total)
+
+	rt.Log.Info(fmt.Sprintf("Current Subscription List: %d", subsList.Total))
 	for _, sub := range subsList.Data {
-		rt.Log.Info("Status:" + sub.Status + " ,Type:" + sub.Type)
-		subItem := fmt.Sprintf("ID:%s, Status: %s, Type: %s\n", sub.ID, sub.Status, sub.Type)
-		_, _ = w.Write([]byte(subItem))
+		rt.Log.Info(fmt.Sprintf("Status: %s, Type: %s, ID: %s", sub.Status, sub.Type, sub.ID))
 	}
+
+	_ = json.NewEncoder(w).Encode(subsList)
 }
 
 // CreateHandler creates a subscription based on the parameter
@@ -340,19 +349,25 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_chat_message")
 	defer span.End()
 
+	rt.Log.Info("Received chat message event")
+
 	telemetry.IncrementChatMessageCount(ctx)
 	var chatEvent subscriptions.ChatMessageEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read chat event request body", err)
 		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
 
 	if err := json.Unmarshal(body, &chatEvent); err != nil {
+		rt.Log.Error("Failed to unmarshal chat event payload", err)
 		telemetry.RecordError(span, err)
 		return
 	}
+
+	rt.Log.Info(fmt.Sprintf("Processing chat message from user: %s, message: %s", chatEvent.Event.ChatterUserName, chatEvent.Event.Message.Text))
 
 	// Add chat-specific attributes
 	telemetry.AddSpanAttributes(span,
@@ -362,6 +377,7 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 
 	//	Send to parser to respond
 	rt.Actions.ParseMessage(chatEvent)
+	rt.Log.Info(fmt.Sprintf("Successfully processed chat message from: %s", chatEvent.Event.ChatterUserName))
 }
 
 // FollowHandler responds to follow events
@@ -369,60 +385,114 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_follow")
 	defer span.End()
 
+	rt.Log.Info("Received follow event")
+
 	telemetry.IncrementFollowCount(ctx)
 	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read follow event request body", err)
 		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
 
 	if err := json.Unmarshal(body, &followEventResponse); err != nil {
+		rt.Log.Error("Failed to unmarshal follow event payload", err)
 		telemetry.RecordError(span, err)
 		return
 	}
+
+	rt.Log.Info(fmt.Sprintf("New follower: %s", followEventResponse.Event.UserName))
 
 	telemetry.AddSpanAttributes(span,
 		attribute.String("follow.user", followEventResponse.Event.UserName),
 	)
 
 	// Send to chat
-	_ = rt.Actions.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName))
+	if err := rt.Actions.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName)); err != nil {
+		rt.Log.Error("Failed to send follow thank you message to chat", err)
+		telemetry.RecordError(span, err)
+		return
+	}
+	rt.Log.Info(fmt.Sprintf("Successfully processed follow from: %s", followEventResponse.Event.UserName))
 }
 
 // SubHandler responds to subscription events
 func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
-	telemetry.IncrementSubscriptionCount(r.Context())
+	ctx, span := telemetry.StartSpan(r.Context(), "handle_subscription")
+	defer span.End()
+
+	rt.Log.Info("Received subscription event")
+
+	telemetry.IncrementSubscriptionCount(ctx)
 	var subEventResponse subscriptions.SubscriptionEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read subscription event request body", err)
+		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
+
 	if err := json.Unmarshal(body, &subEventResponse); err != nil {
-		rt.Log.Error("Failed to unmarshal sub event", err)
+		rt.Log.Error("Failed to unmarshal subscription event payload", err)
+		telemetry.RecordError(span, err)
 		return
 	}
+
+	rt.Log.Info(fmt.Sprintf("New subscriber: %s", subEventResponse.Event.UserName))
+
+	telemetry.AddSpanAttributes(span,
+		attribute.String("subscription.user", subEventResponse.Event.UserName),
+	)
+
 	// send to chat
-	_ = rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName))
+	if err := rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName)); err != nil {
+		rt.Log.Error("Failed to send subscription thank you message to chat", err)
+		telemetry.RecordError(span, err)
+		return
+	}
+	rt.Log.Info(fmt.Sprintf("Successfully processed subscription from: %s", subEventResponse.Event.UserName))
 }
 
 // CheerHandler responds to cheer events
 func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
-	telemetry.IncrementCheerCount(r.Context())
+	ctx, span := telemetry.StartSpan(r.Context(), "handle_cheer")
+	defer span.End()
+
+	rt.Log.Info("Received cheer event")
+
+	telemetry.IncrementCheerCount(ctx)
 	var cheerEventResponse subscriptions.CheerEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read cheer event request body", err)
+		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
+
 	if err := json.Unmarshal(body, &cheerEventResponse); err != nil {
-		rt.Log.Error("Failed to unmarshal cheer event", err)
+		rt.Log.Error("Failed to unmarshal cheer event payload", err)
+		telemetry.RecordError(span, err)
 		return
 	}
+
+	rt.Log.Info(fmt.Sprintf("Cheer received from: %s, bits: %d", cheerEventResponse.Event.UserName, cheerEventResponse.Event.Bits))
+
+	telemetry.AddSpanAttributes(span,
+		attribute.String("cheer.user", cheerEventResponse.Event.UserName),
+		attribute.Int("cheer.bits", cheerEventResponse.Event.Bits),
+	)
+
 	// send to chat
-	_ = rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName))
+	if err := rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName)); err != nil {
+		rt.Log.Error("Failed to send cheer thank you message to chat", err)
+		telemetry.RecordError(span, err)
+		return
+	}
+	rt.Log.Info(fmt.Sprintf("Successfully processed cheer from: %s", cheerEventResponse.Event.UserName))
 }
 
 // RewardHandler responds to reward events
@@ -430,19 +500,25 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_reward")
 	defer span.End()
 
+	rt.Log.Info("Received reward redemption event")
+
 	telemetry.IncrementRewardCount(ctx)
 	var rewardEventResponse subscriptions.RewardEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read reward event request body", err)
 		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
 
 	if err := json.Unmarshal(body, &rewardEventResponse); err != nil {
+		rt.Log.Error("Failed to unmarshal reward event payload", err)
 		telemetry.RecordError(span, err)
 		return
 	}
+
+	rt.Log.Info(fmt.Sprintf("Reward redeemed by: %s, reward: %s", rewardEventResponse.Event.UserName, rewardEventResponse.Event.Reward.Title))
 
 	telemetry.AddSpanAttributes(span,
 		attribute.String("reward.title", rewardEventResponse.Event.Reward.Title),
@@ -450,26 +526,36 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
+		rt.Log.Info("Processing Next Song reward")
 		if err := rt.Spotify.NextSong(); err != nil {
 			rt.Log.Error("Failed to skip to next song", err)
 			telemetry.RecordError(span, err)
+			return
 		}
+		rt.Log.Info("Successfully skipped to next song")
 	}
 	if rewardEventResponse.Event.Reward.Title == "Add Song" {
-		rt.Log.Info("Adding song to playlist")
+		rt.Log.Info("Processing Add Song reward")
 		spotifyURL := rewardEventResponse.Event.UserInput
 		telemetry.AddSpanAttributes(span, attribute.String("spotify.url", spotifyURL))
 		if err := rt.Spotify.AddToPlaylist(spotifyURL); err != nil {
 			rt.Log.Error("Failed to add song to playlist", err)
 			telemetry.RecordError(span, err)
+			return
 		}
+		rt.Log.Info(fmt.Sprintf("Successfully added song to playlist: %s", spotifyURL))
 	}
 	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
+		rt.Log.Info("Processing Reset Playlist reward")
 		if err := rt.Spotify.DeleteSongPlaylist(); err != nil {
 			rt.Log.Error("Failed to reset playlist", err)
 			telemetry.RecordError(span, err)
+			return
 		}
+		rt.Log.Info("Successfully reset playlist")
 	}
+
+	rt.Log.Info(fmt.Sprintf("Successfully processed reward from: %s", rewardEventResponse.Event.UserName))
 }
 
 // TestHandler is used to test if the bot is responding to messages
@@ -486,16 +572,22 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_stream_online")
 	defer span.End()
 
+	rt.Log.Info("Received stream online event")
+
 	rt.streamStartTime = time.Now()
 	telemetry.AddSpanAttributes(span,
 		attribute.String("stream.event", "online"),
 		attribute.String("stream.start_time", rt.streamStartTime.Format(time.RFC3339)),
 	)
 
+	rt.Log.Info(fmt.Sprintf("Stream started at: %s", rt.streamStartTime.Format(time.RFC3339)))
+
 	err := rt.Notification.SendNotification("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
-		rt.Log.Error("Sending message to discord", err)
+		rt.Log.Error("Failed to send stream online notification to discord", err)
 		telemetry.RecordError(span, err)
+	} else {
+		rt.Log.Info("Successfully sent stream online notification to discord")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://automate.mvaldes.dev/webhook/stream-live", http.NoBody)
@@ -524,14 +616,20 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		rt.Log.Info("Executing Notification Workflows")
+		rt.Log.Info("Successfully executed notification workflows")
+	} else {
+		rt.Log.Info(fmt.Sprintf("Webhook returned non-OK status: %d", resp.StatusCode))
 	}
+
+	rt.Log.Info("Successfully processed stream online event")
 }
 
 // StreamOfflineHandler tracks when streams end
 func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_stream_offline")
 	defer span.End()
+
+	rt.Log.Info("Received stream offline event")
 
 	if !rt.streamStartTime.IsZero() {
 		duration := time.Since(rt.streamStartTime).Seconds()
@@ -540,9 +638,13 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 			attribute.String("stream.event", "offline"),
 			attribute.Float64("stream.duration_seconds", duration),
 		)
-		rt.Log.Info("Stream ended", "duration", duration)
+		rt.Log.Info(fmt.Sprintf("Stream ended, duration: %.2f seconds", duration))
 		rt.streamStartTime = time.Time{} // Reset
+	} else {
+		rt.Log.Info("Stream offline event received but no start time was recorded")
 	}
+
+	rt.Log.Info("Successfully processed stream offline event")
 }
 
 // PlayingHandler displays music playing in spotify
