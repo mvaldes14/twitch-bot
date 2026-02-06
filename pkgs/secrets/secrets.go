@@ -199,8 +199,8 @@ func (s *SecretService) GetUserToken() (string, error) {
 	return token, nil
 }
 
-// RefreshAppToken uses the refresh token to get a new one.
-// It persists the rotated refresh token to Redis and returns the access token and its TTL.
+// RefreshAppToken generates a new app access token using client credentials.
+// App access tokens are required for Twitch EventSub webhook subscriptions.
 func (s *SecretService) RefreshAppToken() (string, int, error) {
 	ctx := context.Background()
 	_, span := telemetry.StartExternalSpan(ctx, "twitch.refresh_app_token", "twitch", "refresh_app_token")
@@ -209,25 +209,15 @@ func (s *SecretService) RefreshAppToken() (string, int, error) {
 	twitchID := os.Getenv(twitchClientID)
 	twitchSecretVal := os.Getenv(twitchSecret)
 
-	// Read refresh token from Redis first, fall back to env var
-	twitchRefreshTk, err := s.Cache.GetToken(twitchRefreshToken)
-	if err != nil || twitchRefreshTk == "" {
-		twitchRefreshTk = os.Getenv(twitchRefreshToken)
-		telemetry.AddSpanAttributes(span, attribute.String("refresh_token.source", "env"))
-	} else {
-		telemetry.AddSpanAttributes(span, attribute.String("refresh_token.source", "redis"))
-	}
-
-	// Validate refresh token is present
-	if twitchRefreshTk == "" {
-		missingErr := fmt.Errorf("twitch refresh token not found in redis or environment")
-		s.Log.Error("Cannot refresh app token - refresh token missing", missingErr)
+	if twitchID == "" || twitchSecretVal == "" {
+		missingErr := fmt.Errorf("TWITCH_CLIENT_ID or TWITCH_CLIENT_SECRET not set")
+		s.Log.Error("Cannot generate app token - credentials missing", missingErr)
 		telemetry.RecordError(span, missingErr)
 		telemetry.IncrementTokenRefreshTotal(ctx, "app", "error")
 		return "", 0, missingErr
 	}
 
-	payload := fmt.Sprintf("grant_type=refresh_token&refresh_token=%v&client_id=%v&client_secret=%v", twitchRefreshTk, twitchID, twitchSecretVal)
+	payload := fmt.Sprintf("grant_type=client_credentials&client_id=%v&client_secret=%v", twitchID, twitchSecretVal)
 	req := RequestJSON{
 		Method:  "POST",
 		URL:     twitchTokenURL,
@@ -236,29 +226,16 @@ func (s *SecretService) RefreshAppToken() (string, int, error) {
 	}
 	var response TwitchRefreshResponse
 	if err := s.MakeRequestMarshallJSON(req, &response); err != nil {
-		s.Log.Error("Failed to make request refreshing token", err)
+		s.Log.Error("Failed to make request for app token", err)
 		telemetry.RecordError(span, err)
 		telemetry.IncrementTokenRefreshTotal(ctx, "app", "error")
-		return "", 0, fmt.Errorf("refresh app token request failed: %w", err)
+		return "", 0, fmt.Errorf("app token request failed: %w", err)
 	}
 	if response.AccessToken == "" {
-		emptyErr := fmt.Errorf("refresh app token returned empty access token")
+		emptyErr := fmt.Errorf("app token request returned empty access token")
 		telemetry.RecordError(span, emptyErr)
 		telemetry.IncrementTokenRefreshTotal(ctx, "app", "error")
 		return "", 0, emptyErr
-	}
-
-	// Persist the rotated refresh token so subsequent refreshes use the new one
-	if response.RefreshToken != "" {
-		telemetry.AddSpanAttributes(span, attribute.Bool("refresh_token.rotated", true))
-		if err := s.Cache.StoreToken(cache.Token{
-			Key:   twitchRefreshToken,
-			Value: response.RefreshToken,
-			// Refresh tokens don't expire on their own, use a long TTL
-			Expiration: 0,
-		}); err != nil {
-			s.Log.Error("Failed to store rotated refresh token", err)
-		}
 	}
 
 	expiresIn := response.ExpiresIn
