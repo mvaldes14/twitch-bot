@@ -111,7 +111,11 @@ type ChatMessageEvent struct {
 			} `json:"fragments"`
 		} `json:"message"`
 		Color       string    `json:"color"`
-		Badges      []string  `json:"badges"`
+		Badges []struct {
+			SetID string `json:"set_id"`
+			ID    string `json:"id"`
+			Info  string `json:"info"`
+		} `json:"badges"`
 		MessageType string    `json:"message_type"`
 		SentAt      time.Time `json:"sent_at"`
 	} `json:"event"`
