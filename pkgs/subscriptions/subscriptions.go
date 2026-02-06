@@ -89,7 +89,7 @@ func (s *Subscription) CreateSubscription(payload string) error {
 	}
 
 	// Check if the subscription was created successfully
-	if resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
 		createErr := fmt.Errorf("failed to create subscription: status code %d", resp.StatusCode)
 		s.Log.Error(fmt.Sprintf("Failed to create subscription - Status: %d, Response: %s", resp.StatusCode, string(body)), createErr)
 		return createErr
