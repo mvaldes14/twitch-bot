@@ -16,23 +16,21 @@ type CustomLogger struct {
 }
 
 type logInfoMessage struct {
-	Timestamp string         `json:"timestamp"`
-	Level     string         `json:"level"`
-	Body      string         `json:"message"`
-	Module    string         `json:"module"`
-	Operation string         `json:"operation,omitempty"`
-	Status    string         `json:"status,omitempty"`
-	Details   map[string]any `json:"details,omitempty"`
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Body      string `json:"message"`
+	Module    string `json:"module"`
+	Operation string `json:"operation,omitempty"`
+	Status    string `json:"status,omitempty"`
 }
 
 type logErrorMessage struct {
-	Timestamp string         `json:"timestamp"`
-	Level     string         `json:"level"`
-	Body      string         `json:"message"`
-	Module    string         `json:"module"`
-	Error     string         `json:"error"`
-	Operation string         `json:"operation,omitempty"`
-	Details   map[string]any `json:"details,omitempty"`
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Body      string `json:"message"`
+	Module    string `json:"module"`
+	Error     string `json:"error"`
+	Operation string `json:"operation,omitempty"`
 }
 
 // NewLogger Returns a logger in json for the bot
@@ -44,8 +42,7 @@ func NewLogger(module string) *CustomLogger {
 // parseStructuredLog extracts structured data from formatted log messages
 // Supports formats like: "[TAG] message" or "[TAG: value] message"
 // Returns the parsed body/operation/status for dashboard consumption
-func parseStructuredLog(msg string) (body string, operation string, status string, details map[string]any) {
-	details = make(map[string]any)
+func parseStructuredLog(msg string) (body string, operation string, status string, _ interface{}) {
 	body = msg
 
 	// Extract tags like [SOURCE: ENV VAR], [CACHE HIT], etc.
@@ -58,10 +55,8 @@ func parseStructuredLog(msg string) (body string, operation string, status strin
 			if colonIdx := findColon(tag); colonIdx > 0 {
 				operation = tag[:colonIdx]
 				status = tag[colonIdx+2:] // Skip ": "
-				details["tag"] = tag
 			} else {
 				operation = tag
-				details["tag"] = tag
 			}
 		}
 	}
@@ -98,7 +93,7 @@ func (l CustomLogger) Info(msg ...any) {
 	}
 
 	// Parse structured content
-	body, operation, status, details := parseStructuredLog(msgStr)
+	body, operation, status, _ := parseStructuredLog(msgStr)
 
 	event := logInfoMessage{
 		Timestamp: timestamp,
@@ -107,7 +102,6 @@ func (l CustomLogger) Info(msg ...any) {
 		Module:    l.module,
 		Operation: operation,
 		Status:    status,
-		Details:   details,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)
 }
@@ -117,7 +111,7 @@ func (l CustomLogger) Error(msg string, e error) {
 	timestamp := time.Now().Format(time.RFC3339)
 
 	// Parse structured content from error message
-	body, operation, _, details := parseStructuredLog(msg)
+	body, operation, _, _ := parseStructuredLog(msg)
 
 	event := logErrorMessage{
 		Timestamp: timestamp,
@@ -126,7 +120,6 @@ func (l CustomLogger) Error(msg string, e error) {
 		Module:    l.module,
 		Error:     e.Error(),
 		Operation: operation,
-		Details:   details,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)
 }
