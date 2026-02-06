@@ -113,12 +113,17 @@ func (l CustomLogger) Error(msg string, e error) {
 	// Parse structured content from error message
 	body, operation, _ := parseStructuredLog(msg)
 
+	errStr := ""
+	if e != nil {
+		errStr = e.Error()
+	}
+
 	event := logErrorMessage{
 		Timestamp: timestamp,
 		Level:     "error",
 		Body:      body,
 		Module:    l.module,
-		Error:     e.Error(),
+		Error:     errStr,
 		Operation: operation,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)

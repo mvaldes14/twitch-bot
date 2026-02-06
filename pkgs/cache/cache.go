@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
@@ -31,25 +32,24 @@ var (
 	rdb           *redis.Client
 	errorNoToken  = errors.New("no token found for the given key")
 	cacheInstance *Service
+	once          sync.Once
 )
 
 // NewCacheService initializes a new CacheService instance (singleton)
 func NewCacheService() *Service {
-	if cacheInstance != nil {
-		return cacheInstance
-	}
+	once.Do(func() {
+		redisURL := os.Getenv("REDIS_URL")
 
-	redisURL := os.Getenv("REDIS_URL")
-
-	logger := telemetry.NewLogger("cache")
-	rdb = redis.NewClient(&redis.Options{
-		Addr: redisURL,
+		logger := telemetry.NewLogger("cache")
+		rdb = redis.NewClient(&redis.Options{
+			Addr: redisURL,
+		})
+		if _, err := rdb.Ping(ctx).Result(); err != nil {
+			panic("Could not connect to Redis: " + err.Error())
+		}
+		logger.Info("Connected to Redis successfully")
+		cacheInstance = &Service{Log: logger}
 	})
-	if _, err := rdb.Ping(ctx).Result(); err != nil {
-		panic("Could not connect to Redis: " + err.Error())
-	}
-	logger.Info("Connected to Redis successfully")
-	cacheInstance = &Service{Log: logger}
 	return cacheInstance
 }
 

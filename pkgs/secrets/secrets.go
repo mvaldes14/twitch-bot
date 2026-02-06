@@ -70,7 +70,7 @@ func (s *SecretService) GetEnvironmentVariable(key string) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
 		err := fmt.Errorf("required environment variable '%s' is missing or empty - cannot proceed", key)
-		s.Log.Error(err.Error(), nil)
+		s.Log.Error(err.Error(), err)
 		return "", err
 	}
 	return value, nil
@@ -418,7 +418,7 @@ func (s *SecretService) GetSpotifyToken() (string, error) {
 
 	if len(missingVars) > 0 {
 		missingErr := fmt.Errorf("missing Spotify credentials in environment: %v - required to refresh Spotify access tokens. Pass these as environment variables", missingVars)
-		s.Log.Error(missingErr.Error(), nil)
+		s.Log.Error(missingErr.Error(), missingErr)
 		telemetry.RecordError(span, missingErr)
 		return "", missingErr
 	}

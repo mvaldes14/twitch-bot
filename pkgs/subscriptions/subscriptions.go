@@ -90,8 +90,9 @@ func (s *Subscription) CreateSubscription(payload string) error {
 
 	// Check if the subscription was created successfully
 	if resp.StatusCode != http.StatusCreated {
-		s.Log.Error(fmt.Sprintf("Failed to create subscription - Status: %d, Response: %s", resp.StatusCode, string(body)), nil)
-		return fmt.Errorf("failed to create subscription: status code %d", resp.StatusCode)
+		createErr := fmt.Errorf("failed to create subscription: status code %d", resp.StatusCode)
+		s.Log.Error(fmt.Sprintf("Failed to create subscription - Status: %d, Response: %s", resp.StatusCode, string(body)), createErr)
+		return createErr
 	}
 
 	// Unmarshal response to get subscription details
@@ -150,8 +151,9 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	// Check response status code
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		s.Log.Error(fmt.Sprintf("Failed to get subscriptions - Status: %d, Response: %s", resp.StatusCode, string(body)), nil)
-		return ValidateSubscription{}, fmt.Errorf("failed to get subscriptions: status code %d", resp.StatusCode)
+		getErr := fmt.Errorf("failed to get subscriptions: status code %d", resp.StatusCode)
+		s.Log.Error(fmt.Sprintf("Failed to get subscriptions - Status: %d, Response: %s", resp.StatusCode, string(body)), getErr)
+		return ValidateSubscription{}, getErr
 	}
 
 	body, err := io.ReadAll(resp.Body)
