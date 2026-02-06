@@ -116,20 +116,18 @@ func (s *SecretService) InitSecrets() {
 		}
 	}
 
-	// Twitch App Token (refresh token grant)
-	if _, err := s.Cache.GetToken("TWITCH_APP_TOKEN"); err != nil {
-		s.Log.Info("[SOURCE: GENERATED] TWITCH_APP_TOKEN not in cache, generating from refresh token")
-		newToken, expiresIn, err := s.RefreshAppToken()
-		if err != nil {
-			s.Log.Error("Failed to generate TWITCH_APP_TOKEN - check if TWITCH_REFRESH_TOKEN is set and token generation succeeded:", err)
-		} else {
-			if err := s.Cache.StoreToken(cache.Token{
-				Key:        "TWITCH_APP_TOKEN",
-				Value:      newToken,
-				Expiration: time.Duration(expiresIn) * time.Second,
-			}); err != nil {
-				s.Log.Error("Failed to store TWITCH_APP_TOKEN in Redis:", err)
-			}
+	// Twitch App Token - always generate fresh via client credentials on startup
+	s.Log.Info("[SOURCE: GENERATED] Generating TWITCH_APP_TOKEN via client credentials")
+	newToken, expiresIn, err := s.RefreshAppToken()
+	if err != nil {
+		s.Log.Error("Failed to generate TWITCH_APP_TOKEN - check TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET:", err)
+	} else {
+		if err := s.Cache.StoreToken(cache.Token{
+			Key:        "TWITCH_APP_TOKEN",
+			Value:      newToken,
+			Expiration: time.Duration(expiresIn) * time.Second,
+		}); err != nil {
+			s.Log.Error("Failed to store TWITCH_APP_TOKEN in Redis:", err)
 		}
 	}
 
