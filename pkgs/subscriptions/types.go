@@ -10,27 +10,30 @@ type SubscriptionType struct {
 	Type    string
 }
 
+// SubscriptionData represents a single subscription from Twitch
+type SubscriptionData struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	Type      string `json:"type"`
+	Version   string `json:"version"`
+	Condition struct {
+		BroadcasterUserID string `json:"broadcaster_user_id"`
+		UserID            string `json:"user_id"`
+	} `json:"condition"`
+	CreatedAt time.Time `json:"created_at"`
+	Transport struct {
+		Method   string `json:"method"`
+		Callback string `json:"callback"`
+	} `json:"transport"`
+	Cost int `json:"cost"`
+}
+
 // ValidateSubscription represents the response from Twitch subscription validation
 type ValidateSubscription struct {
-	Data []struct {
-		ID        string `json:"id"`
-		Status    string `json:"status"`
-		Type      string `json:"type"`
-		Version   string `json:"version"`
-		Condition struct {
-			BroadcasterUserID string `json:"broadcaster_user_id"`
-			UserID            string `json:"user_id"`
-		} `json:"condition"`
-		CreatedAt time.Time `json:"created_at"`
-		Transport struct {
-			Method   string `json:"method"`
-			Callback string `json:"callback"`
-		} `json:"transport"`
-		Cost int `json:"cost"`
-	} `json:"data"`
-	Total        int `json:"total"`
-	MaxTotalCost int `json:"max_total_cost"`
-	TotalCost    int `json:"total_cost"`
+	Data         []SubscriptionData `json:"data"`
+	Total        int                `json:"total"`
+	MaxTotalCost int                `json:"max_total_cost"`
+	TotalCost    int                `json:"total_cost"`
 }
 
 // EventLog represents a log entry for an event

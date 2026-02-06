@@ -250,6 +250,8 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 	_, span := telemetry.StartSpan(r.Context(), "create_subscription")
 	defer span.End()
 
+	rt.Log.Info("Received create subscription request")
+
 	requestType, err := io.ReadAll(r.Body)
 	if err != nil {
 		rt.Log.Error("Could not parse payload", err)
@@ -266,6 +268,8 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not unmarshal payload", http.StatusBadRequest)
 		return
 	}
+
+	rt.Log.Info(fmt.Sprintf("Creating subscription for type: %s", requestTypeString.Type))
 
 	telemetry.AddSpanAttributes(span,
 		attribute.String("subscription.type_requested", requestTypeString.Type),
@@ -317,10 +321,9 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 		)
 
 		payload := rt.GeneratePayload(subTypeConfig)
-		rt.Log.Info("Creating subscription for type: " + requestTypeString.Type)
 
 		if err := rt.Subs.CreateSubscription(payload); err != nil {
-			rt.Log.Error("Failed to create subscription", err)
+			rt.Log.Error(fmt.Sprintf("Failed to create subscription for type: %s", requestTypeString.Type), err)
 			telemetry.RecordError(span, err)
 			telemetry.AddSpanAttributes(span,
 				attribute.String("subscription.status", "failed"),
@@ -329,11 +332,13 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		rt.Log.Info("Subscription created successfully: " + requestTypeString.Type)
+		rt.Log.Info(fmt.Sprintf("Subscription created successfully for type: %s", requestTypeString.Type))
 		telemetry.AddSpanAttributes(span,
 			attribute.String("subscription.status", "success"),
 		)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": fmt.Sprintf("Subscription created for %s", requestTypeString.Type)})
 	} else {
 		rt.Log.Error("Invalid subscription type requested: "+requestTypeString.Type, errorInvalidSbuscription)
 		telemetry.RecordError(span, errorInvalidSbuscription)
