@@ -91,17 +91,17 @@ func (s *SecretService) InitSecrets() {
 		userTokenFromEnv := os.Getenv(twitchUserToken)
 		if userTokenFromEnv != "" {
 			// Store the environment variable value in Redis with 4-hour TTL
+			s.Log.Info("[SOURCE: ENV VAR] TWITCH_USER_TOKEN loaded from environment variable")
 			if err := s.Cache.StoreToken(cache.Token{
 				Key:        "TWITCH_USER_TOKEN",
 				Value:      userTokenFromEnv,
 				Expiration: time.Duration(twitchUserExpiration) * time.Second,
 			}); err != nil {
 				s.Log.Error("Failed to store TWITCH_USER_TOKEN in Redis:", err)
-			} else {
-				s.Log.Info("User token loaded from environment and stored in cache")
 			}
 		} else {
 			// No env var, try to generate from refresh token
+			s.Log.Info("[SOURCE: GENERATED] TWITCH_USER_TOKEN not in environment, generating from refresh token")
 			newToken, expiresIn, err := s.RefreshUserToken()
 			if err != nil {
 				s.Log.Error("Failed to generate TWITCH_USER_TOKEN from refresh token - initial token may not have been provided:", err)
@@ -112,8 +112,6 @@ func (s *SecretService) InitSecrets() {
 					Expiration: time.Duration(expiresIn) * time.Second,
 				}); err != nil {
 					s.Log.Error("Failed to store TWITCH_USER_TOKEN in Redis:", err)
-				} else {
-					s.Log.Info("User token generated from refresh token and stored in cache")
 				}
 			}
 		}
@@ -121,6 +119,7 @@ func (s *SecretService) InitSecrets() {
 
 	// Twitch App Token (refresh token grant)
 	if _, err := s.Cache.GetToken("TWITCH_APP_TOKEN"); err != nil {
+		s.Log.Info("[SOURCE: GENERATED] TWITCH_APP_TOKEN not in cache, generating from refresh token")
 		newToken, expiresIn, err := s.RefreshAppToken()
 		if err != nil {
 			s.Log.Error("Failed to generate TWITCH_APP_TOKEN - check if TWITCH_REFRESH_TOKEN is set and token generation succeeded:", err)
@@ -137,6 +136,7 @@ func (s *SecretService) InitSecrets() {
 
 	// Spotify Token
 	if _, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err != nil {
+		s.Log.Info("[SOURCE: GENERATED] SPOTIFY_TOKEN not in cache, generating from refresh token")
 		newSpotifyToken, err := s.GetSpotifyToken()
 		if err != nil {
 			s.Log.Error("Failed to generate SPOTIFY_TOKEN - check if SPOTIFY_REFRESH_TOKEN and credentials are set:", err)
