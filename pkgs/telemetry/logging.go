@@ -18,9 +18,8 @@ type CustomLogger struct {
 type logInfoMessage struct {
 	Timestamp string         `json:"timestamp"`
 	Level     string         `json:"level"`
-	Message   any            `json:"message"`
+	Body      string         `json:"message"`
 	Module    string         `json:"module"`
-	Body      string         `json:"body,omitempty"`
 	Operation string         `json:"operation,omitempty"`
 	Status    string         `json:"status,omitempty"`
 	Details   map[string]any `json:"details,omitempty"`
@@ -29,10 +28,9 @@ type logInfoMessage struct {
 type logErrorMessage struct {
 	Timestamp string         `json:"timestamp"`
 	Level     string         `json:"level"`
-	Message   any            `json:"message"`
+	Body      string         `json:"message"`
 	Module    string         `json:"module"`
 	Error     string         `json:"error"`
-	Body      string         `json:"body,omitempty"`
 	Operation string         `json:"operation,omitempty"`
 	Details   map[string]any `json:"details,omitempty"`
 }
@@ -108,9 +106,8 @@ func (l CustomLogger) Info(msg ...any) {
 	event := logInfoMessage{
 		Timestamp: timestamp,
 		Level:     "info",
-		Message:   msg,
-		Module:    l.module,
 		Body:      body,
+		Module:    l.module,
 		Operation: operation,
 		Status:    status,
 		Details:   details,
@@ -128,10 +125,9 @@ func (l CustomLogger) Error(msg string, e error) {
 	event := logErrorMessage{
 		Timestamp: timestamp,
 		Level:     "error",
-		Message:   msg,
+		Body:      body,
 		Module:    l.module,
 		Error:     e.Error(),
-		Body:      body,
 		Operation: operation,
 		Details:   details,
 	}
@@ -144,7 +140,7 @@ func (l CustomLogger) Chat(msg string) {
 	event := logErrorMessage{
 		Timestamp: timestamp,
 		Level:     "chat",
-		Message:   msg,
+		Body:      msg,
 		Module:    l.module,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)
