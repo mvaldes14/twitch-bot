@@ -97,9 +97,11 @@ func (s *Subscription) CreateSubscription(payload string) error {
 	// Unmarshal response to get subscription details
 	var subscriptionResponse ValidateSubscription
 	if err := json.Unmarshal(body, &subscriptionResponse); err != nil {
-		s.Log.Error("Error unmarshalling subscription response", err)
+		s.Log.Error(fmt.Sprintf("Error unmarshalling subscription response, body: %s", string(body)), err)
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	s.Log.Info(fmt.Sprintf("Subscription response - Total: %d, Data length: %d", subscriptionResponse.Total, len(subscriptionResponse.Data)))
 
 	// Verify subscription was actually created
 	if subscriptionResponse.Total > 0 && len(subscriptionResponse.Data) > 0 {
@@ -108,7 +110,7 @@ func (s *Subscription) CreateSubscription(payload string) error {
 		return nil
 	}
 
-	s.Log.Error("Subscription response received but no subscription data found", errors.New("empty subscription data"))
+	s.Log.Error(fmt.Sprintf("Subscription response received but no subscription data found. Total: %d, Data: %v", subscriptionResponse.Total, subscriptionResponse.Data), errors.New("empty subscription data"))
 	return errors.New("no subscription data in response")
 }
 
