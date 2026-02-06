@@ -42,11 +42,11 @@ func NewLogger(module string) *CustomLogger {
 // parseStructuredLog extracts structured data from formatted log messages
 // Supports formats like: "[TAG] message" or "[TAG: value] message"
 // Returns the parsed body/operation/status for dashboard consumption
-func parseStructuredLog(msg string) (body string, operation string, status string, _ interface{}) {
+func parseStructuredLog(msg string) (body string, operation string, status string) {
 	body = msg
 
 	// Extract tags like [SOURCE: ENV VAR], [CACHE HIT], etc.
-	if len(msg) > 0 && msg[0] == '[' {
+	if msg != "" && msg[0] == '[' {
 		if closeIdx := findClosingBracket(msg); closeIdx > 0 {
 			tag := msg[1:closeIdx]
 			body = msg[closeIdx+2:] // Skip "] "
@@ -93,7 +93,7 @@ func (l CustomLogger) Info(msg ...any) {
 	}
 
 	// Parse structured content
-	body, operation, status, _ := parseStructuredLog(msgStr)
+	body, operation, status := parseStructuredLog(msgStr)
 
 	event := logInfoMessage{
 		Timestamp: timestamp,
@@ -111,7 +111,7 @@ func (l CustomLogger) Error(msg string, e error) {
 	timestamp := time.Now().Format(time.RFC3339)
 
 	// Parse structured content from error message
-	body, operation, _, _ := parseStructuredLog(msg)
+	body, operation, _ := parseStructuredLog(msg)
 
 	event := logErrorMessage{
 		Timestamp: timestamp,

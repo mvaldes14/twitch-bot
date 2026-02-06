@@ -41,12 +41,11 @@ const (
 )
 
 var (
-	errMissingTokenOrID      = errors.New("token or client ID not found in environment")
-	errSpotifyMissingSecrets = errors.New("missing credentials from environment")
-	errSpotifyNoToken        = errors.New("failed to produce a new token")
-	errInvalidRequest        = errors.New("failed to create HTTP request")
-	errHTTPRequest           = errors.New("HTTP request failed")
-	errResponseParsing       = errors.New("failed to parse response")
+	errMissingTokenOrID = errors.New("token or client ID not found in environment")
+	errSpotifyNoToken   = errors.New("failed to produce a new token")
+	errInvalidRequest   = errors.New("failed to create HTTP request")
+	errHTTPRequest      = errors.New("HTTP request failed")
+	errResponseParsing  = errors.New("failed to parse response")
 )
 
 // SecretService implements SecretManager interface

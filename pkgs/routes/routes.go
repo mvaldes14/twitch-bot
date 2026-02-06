@@ -26,8 +26,6 @@ const (
 )
 
 var (
-	errorTokenNotFound       = errors.New("token not found for API protected routes")
-	errorTokenNotValid       = errors.New("token not valid for API protected routes")
 	errorInvalidSbuscription = errors.New("could not generate a valid subscription")
 	errorNoMusicPlaying      = errors.New("nothing is playing on spotify")
 )
@@ -98,7 +96,7 @@ func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 			rt.Log.Error("Cannot authenticate request - ADMIN_TOKEN missing from environment configuration", errMsg)
 			telemetry.RecordError(span, errMsg)
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{
+			_ = json.NewEncoder(w).Encode(map[string]string{
 				"error": "admin authentication not configured",
 			})
 			return

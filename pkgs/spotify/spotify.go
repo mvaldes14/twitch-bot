@@ -29,7 +29,6 @@ const (
 )
 
 var (
-	errSpotifyNoToken  = errors.New("failed to produce a new token")
 	errInvalidRequest  = errors.New("failed to create HTTP request")
 	errHTTPRequest     = errors.New("HTTP request failed")
 	errResponseParsing = errors.New("failed to parse response")

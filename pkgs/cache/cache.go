@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/attribute"
 )
 
