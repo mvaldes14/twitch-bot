@@ -27,6 +27,7 @@ var requiredEnvVars = []string{
 	"SPOTIFY_CLIENT_SECRET",
 	"SPOTIFY_REFRESH_TOKEN",
 	"REDIS_URL",
+	"OTEL_EXPORTER_OTLP_ENDPOINT",
 }
 
 // validateRequiredEnvVars checks that all required environment variables are present
