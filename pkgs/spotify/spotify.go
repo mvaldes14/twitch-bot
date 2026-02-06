@@ -29,7 +29,6 @@ const (
 )
 
 var (
-	errSpotifyNoToken  = errors.New("failed to produce a new token")
 	errInvalidRequest  = errors.New("failed to create HTTP request")
 	errHTTPRequest     = errors.New("HTTP request failed")
 	errResponseParsing = errors.New("failed to parse response")
@@ -60,14 +59,26 @@ func NewSpotify() *Spotify {
 	}
 }
 
-// getValidToken returns a valid token, refreshing if necessary
+// getValidToken returns a valid token from Redis cache
+// Validates the token is not empty and fails early if missing
+// Returns clear error message indicating "spotify token missing from Redis cache"
 func (s *Spotify) getValidToken() (string, error) {
-	if cachedToken, err := s.Cache.GetToken("SPOTIFY_TOKEN"); err == nil && cachedToken != "" {
-		s.Log.Info("Using cached token")
-		return cachedToken, nil
+	cachedToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
+	if err != nil {
+		tokenErr := fmt.Errorf("spotify token missing from Redis cache: %w", err)
+		s.Log.Error("Cannot proceed - spotify token not found in cache", tokenErr)
+		return "", tokenErr
 	}
-	return "", errSpotifyNoToken
 
+	// Validate token is not empty
+	if cachedToken == "" {
+		tokenErr := fmt.Errorf("spotify token missing from Redis cache: empty token value")
+		s.Log.Error("Cannot proceed - spotify token is empty", tokenErr)
+		return "", tokenErr
+	}
+
+	s.Log.Info("Using cached spotify token from Redis")
+	return cachedToken, nil
 }
 
 // NextSong Changes the currently playing song
@@ -76,6 +87,7 @@ func (s *Spotify) NextSong() error {
 	ctx, span := telemetry.StartExternalSpan(ctx, "spotify.next_song", "spotify", "next_song")
 	defer span.End()
 
+	// Validate token exists in cache before making API call
 	token, err := s.getValidToken()
 	if err != nil {
 		telemetry.RecordError(span, err)
@@ -125,6 +137,7 @@ func (s *Spotify) GetSong() (SpotifyCurrentlyPlaying, error) {
 	var currentlyPlaying SpotifyCurrentlyPlaying
 	ctx := context.Background()
 
+	// Validate token exists in cache before making API call
 	token, err := s.getValidToken()
 	if err != nil {
 		return currentlyPlaying, fmt.Errorf("failed to get valid token: %w", err)
@@ -210,6 +223,7 @@ func (s *Spotify) AddToPlaylist(song string) error {
 		return errInvalidURL
 	}
 
+	// Validate token exists in cache before making API call
 	token, err := s.getValidToken()
 	if err != nil {
 		return fmt.Errorf("failed to get valid token: %w", err)
@@ -266,6 +280,7 @@ func (s *Spotify) validateURL(url string) bool {
 // GetSongsPlaylistIDs returns a list of track IDs from the playlist
 func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 	ctx := context.Background()
+	// Validate token exists in cache before making API call
 	token, err := s.getValidToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get valid token: %w", err)
@@ -320,6 +335,7 @@ func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 // GetSongsPlaylist returns a list of formatted song names from the playlist
 func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 	ctx := context.Background()
+	// Validate token exists in cache before making API call
 	token, err := s.getValidToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get valid token: %w", err)
@@ -373,6 +389,7 @@ func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 
 // DeleteSongPlaylist wipes the playlist to start fresh
 func (s *Spotify) DeleteSongPlaylist() error {
+	// Validate token exists in cache before making API call
 	token, err := s.getValidToken()
 	if err != nil {
 		return fmt.Errorf("failed to get valid token: %w", err)

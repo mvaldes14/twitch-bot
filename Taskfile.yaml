@@ -1,21 +1,41 @@
-version: '3'
-
+version: "3"
 tasks:
-  dev:
-    description: "Runs the webserver"
-    dir: '{{.USER_WORKING_DIR}}'
-    cmds:
-      - go run .
+    keys:
+        description: "Validates the tokens are present in redis"
+        cmds:
+            - docker exec redis redis-cli -h localhost -p 6379 ping
+            - docker exec redis redis-cli -h localhost -p 6379 --scan | while read key; do
+              value=$(docker exec redis redis-cli GET "$key")
+              echo "$key = $value";done
+    dev:
+        description: "Runs the webserver"
+        dir: "{{.USER_WORKING_DIR}}"
+        cmds:
+            - docker run --name redis -p 6379:6379 -d redis
+            - air
 
-  list:
-    description: "Gets list of current subscriptions"
-    cmds:
-      - | 
-        curl -H 'Authorization: {{.ADMIN_TOKEN}}' \
-        -H "Content-Type: application/json" \
-        http://localhost:3000/api/list
+    list:
+        description: "Gets list of current subscriptions"
+        cmds:
+            - |
+                curl -H 'Authorization: {{.ADMIN_TOKEN}}' \
+                -H "Content-Type: application/json" \
+                http://localhost:3000/api/list
 
-  check:
-    description: "Runs go sec"
-    cmds:
-      - gosec ./...
+    check:
+        description: "Runs go sec"
+        cmds:
+            - gosec ./...
+
+    clean:
+        description: "removes the containers"
+        cmds:
+            - docker stop redis
+            - docker rm redis
+
+    lint:
+        description: "Runs go lint"
+        cmds:
+            - go vet ./...
+            - go fmt ./...
+            - golanci-lint ./...

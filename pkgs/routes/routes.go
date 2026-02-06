@@ -26,8 +26,6 @@ const (
 )
 
 var (
-	errorTokenNotFound       = errors.New("token not found for API protected routes")
-	errorTokenNotValid       = errors.New("token not valid for API protected routes")
 	errorInvalidSbuscription = errors.New("could not generate a valid subscription")
 	errorNoMusicPlaying      = errors.New("nothing is playing on spotify")
 )
@@ -82,20 +80,35 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 	}
 }
 
-// CheckAuthAdmin validates for headers for admin routes
+// CheckAuthAdmin validates authorization headers for admin routes
+// Validates ADMIN_TOKEN environment variable exists before attempting auth
 func (rt *Router) CheckAuthAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		telemetry.IncrementAPICallCount(r.Context())
+		ctx, span := telemetry.StartSpan(r.Context(), "auth_admin_check")
+		defer span.End()
+
+		telemetry.IncrementAPICallCount(ctx)
+
+		// Validate ADMIN_TOKEN environment variable exists before attempting auth
 		token := os.Getenv(adminToken)
 		if token == "" {
-			rt.Log.Error("Admin Token missing", errorTokenNotFound)
-			w.WriteHeader(http.StatusUnauthorized)
+			errMsg := fmt.Errorf("ADMIN_TOKEN not found in environment - required for admin endpoints. Pass ADMIN_TOKEN as an environment variable at startup")
+			rt.Log.Error("Cannot authenticate request - ADMIN_TOKEN missing from environment configuration", errMsg)
+			telemetry.RecordError(span, errMsg)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "admin authentication not configured",
+			})
 			return
 		}
+
+		// Check if provided token matches environment token
 		if r.Header.Get("Authorization") == token {
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		} else {
-			rt.Log.Error("Admin token is invalid", errorTokenNotValid)
+			errMsg := fmt.Errorf("invalid ADMIN_TOKEN provided in Authorization header")
+			rt.Log.Error("Admin authentication failed - provided token does not match", errMsg)
+			telemetry.RecordError(span, errMsg)
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
@@ -143,20 +156,42 @@ func (rw *responseWriter) WriteHeader(code int) {
 // HANDLERS
 // respondToChallenge responds to challenge for a subscription on twitch eventsub
 func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
+	_, span := telemetry.StartSpan(r.Context(), "eventsub_challenge_verification")
+	defer span.End()
+
 	rt.Log.Info("Responding to challenge")
 	var challengeResponse subscriptions.SubscribeEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Failed to read challenge request body", err)
+		telemetry.RecordError(span, err)
 		return
 	}
 	defer r.Body.Close()
+
 	if err := json.Unmarshal(body, &challengeResponse); err != nil {
 		rt.Log.Error("Failed to unmarshal challenge response", err)
+		telemetry.RecordError(span, err)
+		telemetry.AddSpanAttributes(span,
+			attribute.String("challenge.status", "unmarshal_failed"),
+		)
 		return
 	}
+
+	telemetry.AddSpanAttributes(span,
+		attribute.String("challenge.subscription_id", challengeResponse.Subscription.ID),
+		attribute.String("challenge.subscription_type", challengeResponse.Subscription.Type),
+		attribute.String("challenge.subscription_version", challengeResponse.Subscription.Version),
+		attribute.String("challenge.subscription_status", challengeResponse.Subscription.Status),
+	)
+
 	w.Header().Add("Content-Type", "plain/text")
 	_, _ = w.Write([]byte(challengeResponse.Challenge))
-	rt.Log.Info("Response sent to challenge")
+
+	rt.Log.Info(fmt.Sprintf("Challenge response sent - Subscription ID: %s, Type: %s", challengeResponse.Subscription.ID, challengeResponse.Subscription.Type))
+	telemetry.AddSpanAttributes(span,
+		attribute.String("challenge.status", "success"),
+	)
 }
 
 // DeleteHandler deletes all subscriptions
@@ -164,12 +199,15 @@ func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
 	subsList, err := rt.Subs.GetSubscriptions()
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	err = rt.Subs.DeleteSubscriptions(subsList)
 	if err != nil {
 		rt.Log.Error("Could not delete subscriptions", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	rt.Log.Info("Deleted all subscriptions")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -200,17 +238,29 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 
 // CreateHandler creates a subscription based on the parameter
 func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
+	_, span := telemetry.StartSpan(r.Context(), "create_subscription")
+	defer span.End()
+
 	requestType, err := io.ReadAll(r.Body)
 	if err != nil {
+		rt.Log.Error("Could not parse payload", err)
+		telemetry.RecordError(span, err)
 		http.Error(w, "Could not parse payload", http.StatusInternalServerError)
 		return
 	}
 	defer r.Body.Close()
+
 	var requestTypeString SubscriptionTypeRequest
 	if err = json.Unmarshal(requestType, &requestTypeString); err != nil {
+		rt.Log.Error("Could not unmarshal payload", err)
+		telemetry.RecordError(span, err)
 		http.Error(w, "Could not unmarshal payload", http.StatusBadRequest)
 		return
 	}
+
+	telemetry.AddSpanAttributes(span,
+		attribute.String("subscription.type_requested", requestTypeString.Type),
+	)
 
 	subscriptionTypes := map[string]subscriptions.SubscriptionType{
 		"chat": {
@@ -249,16 +299,38 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 			Type:    "stream.offline",
 		},
 	}
+
 	if subTypeConfig, ok := subscriptionTypes[requestTypeString.Type]; ok {
+		telemetry.AddSpanAttributes(span,
+			attribute.String("subscription.config_name", subTypeConfig.Name),
+			attribute.String("subscription.config_version", subTypeConfig.Version),
+			attribute.String("subscription.config_type", subTypeConfig.Type),
+		)
+
 		payload := rt.GeneratePayload(subTypeConfig)
+		rt.Log.Info("Creating subscription for type: " + requestTypeString.Type)
+
 		if err := rt.Subs.CreateSubscription(payload); err != nil {
 			rt.Log.Error("Failed to create subscription", err)
+			telemetry.RecordError(span, err)
+			telemetry.AddSpanAttributes(span,
+				attribute.String("subscription.status", "failed"),
+			)
 			http.Error(w, "Failed to create subscription", http.StatusInternalServerError)
 			return
 		}
-		rt.Log.Info("Subscription created: " + requestTypeString.Type)
+
+		rt.Log.Info("Subscription created successfully: " + requestTypeString.Type)
+		telemetry.AddSpanAttributes(span,
+			attribute.String("subscription.status", "success"),
+		)
+		w.WriteHeader(http.StatusOK)
 	} else {
-		rt.Log.Error("Invalid subscription", errorInvalidSbuscription)
+		rt.Log.Error("Invalid subscription type requested: "+requestTypeString.Type, errorInvalidSbuscription)
+		telemetry.RecordError(span, errorInvalidSbuscription)
+		telemetry.AddSpanAttributes(span,
+			attribute.String("subscription.status", "invalid_type"),
+		)
 		http.Error(w, "Invalid subscription type", http.StatusBadRequest)
 	}
 }
@@ -409,6 +481,7 @@ func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // StreamOnlineHandler sends a message to discord
+// Validates ADMIN_TOKEN environment variable exists before making requests
 func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	ctx, span := telemetry.StartSpan(r.Context(), "handle_stream_online")
 	defer span.End()
@@ -424,13 +497,24 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 		rt.Log.Error("Sending message to discord", err)
 		telemetry.RecordError(span, err)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://automate.mvaldes.dev/webhook/stream-live", http.NoBody)
 	if err != nil {
 		rt.Log.Error("Could not generate request for X post", err)
 		telemetry.RecordError(span, err)
 		return
 	}
-	req.Header.Add("Token", os.Getenv(adminToken))
+
+	// Validate ADMIN_TOKEN exists before attempting to use it
+	adminTokenValue := os.Getenv(adminToken)
+	if adminTokenValue == "" {
+		errMsg := fmt.Errorf("ADMIN_TOKEN not found in environment - required for webhook notifications. Pass ADMIN_TOKEN as an environment variable at startup")
+		rt.Log.Error("Cannot send stream notification - ADMIN_TOKEN missing from environment", errMsg)
+		telemetry.RecordError(span, errMsg)
+		return
+	}
+
+	req.Header.Add("Token", adminTokenValue)
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

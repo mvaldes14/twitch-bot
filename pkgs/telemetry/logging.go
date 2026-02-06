@@ -3,6 +3,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -17,16 +18,19 @@ type CustomLogger struct {
 type logInfoMessage struct {
 	Timestamp string `json:"timestamp"`
 	Level     string `json:"level"`
-	Message   any    `json:"message"`
+	Body      string `json:"message"`
 	Module    string `json:"module"`
+	Operation string `json:"operation,omitempty"`
+	Status    string `json:"status,omitempty"`
 }
 
 type logErrorMessage struct {
 	Timestamp string `json:"timestamp"`
 	Level     string `json:"level"`
-	Message   any    `json:"message"`
+	Body      string `json:"message"`
 	Module    string `json:"module"`
 	Error     string `json:"error"`
+	Operation string `json:"operation,omitempty"`
 }
 
 // NewLogger Returns a logger in json for the bot
@@ -35,27 +39,87 @@ func NewLogger(module string) *CustomLogger {
 	return &CustomLogger{module, output}
 }
 
-// Info logs an info message
+// parseStructuredLog extracts structured data from formatted log messages
+// Supports formats like: "[TAG] message" or "[TAG: value] message"
+// Returns the parsed body/operation/status for dashboard consumption
+func parseStructuredLog(msg string) (body string, operation string, status string) {
+	body = msg
+
+	// Extract tags like [SOURCE: ENV VAR], [CACHE HIT], etc.
+	if msg != "" && msg[0] == '[' {
+		if closeIdx := findClosingBracket(msg); closeIdx > 0 {
+			tag := msg[1:closeIdx]
+			body = msg[closeIdx+2:] // Skip "] "
+
+			// Parse tag format: "TAG" or "TAG: VALUE"
+			if colonIdx := findColon(tag); colonIdx > 0 {
+				operation = tag[:colonIdx]
+				status = tag[colonIdx+2:] // Skip ": "
+			} else {
+				operation = tag
+			}
+		}
+	}
+
+	return
+}
+
+func findClosingBracket(s string) int {
+	for i := 1; i < len(s); i++ {
+		if s[i] == ']' {
+			return i
+		}
+	}
+	return -1
+}
+
+func findColon(s string) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == ':' {
+			return i
+		}
+	}
+	return -1
+}
+
+// Info logs an info message with structured JSON output
 func (l CustomLogger) Info(msg ...any) {
 	timestamp := time.Now().Format(time.RFC3339)
+
+	// Convert message to string for parsing
+	var msgStr string
+	if len(msg) > 0 {
+		msgStr = fmt.Sprint(msg[0])
+	}
+
+	// Parse structured content
+	body, operation, status := parseStructuredLog(msgStr)
+
 	event := logInfoMessage{
 		Timestamp: timestamp,
 		Level:     "info",
-		Message:   msg,
+		Body:      body,
 		Module:    l.module,
+		Operation: operation,
+		Status:    status,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)
 }
 
-// Error logs an error message
+// Error logs an error message with structured JSON output
 func (l CustomLogger) Error(msg string, e error) {
 	timestamp := time.Now().Format(time.RFC3339)
+
+	// Parse structured content from error message
+	body, operation, _ := parseStructuredLog(msg)
+
 	event := logErrorMessage{
 		Timestamp: timestamp,
 		Level:     "error",
-		Message:   msg,
+		Body:      body,
 		Module:    l.module,
 		Error:     e.Error(),
+		Operation: operation,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)
 }
@@ -66,7 +130,7 @@ func (l CustomLogger) Chat(msg string) {
 	event := logErrorMessage{
 		Timestamp: timestamp,
 		Level:     "chat",
-		Message:   msg,
+		Body:      msg,
 		Module:    l.module,
 	}
 	_ = json.NewEncoder(l.output).Encode(event)

@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	meter = otel.Meter("twitch-bot")
+	meter = otel.Meter("twitch.bot")
 
 	// SubscriptionCount counts new subscriptions
 	SubscriptionCount metric.Int64Counter
@@ -54,7 +54,7 @@ func InitMetrics() error {
 	var err error
 
 	SubscriptionCount, err = meter.Int64Counter(
-		"subscription_count",
+		"twitch.subscription_count",
 		metric.WithDescription("Number of subscriptions active"),
 	)
 	if err != nil {
@@ -62,7 +62,7 @@ func InitMetrics() error {
 	}
 
 	RewardCount, err = meter.Int64Counter(
-		"reward_count",
+		"twitch.reward_count",
 		metric.WithDescription("Number of rewards redeemed"),
 	)
 	if err != nil {
@@ -70,7 +70,7 @@ func InitMetrics() error {
 	}
 
 	FollowCount, err = meter.Int64Counter(
-		"follow_count",
+		"twitch.follow_count",
 		metric.WithDescription("Number of followers"),
 	)
 	if err != nil {
@@ -78,7 +78,7 @@ func InitMetrics() error {
 	}
 
 	CheerCount, err = meter.Int64Counter(
-		"cheer_count",
+		"twitch.cheer_count",
 		metric.WithDescription("Number of cheer events"),
 	)
 	if err != nil {
@@ -86,7 +86,7 @@ func InitMetrics() error {
 	}
 
 	APICallCount, err = meter.Int64Counter(
-		"api_count",
+		"twitch.api_count",
 		metric.WithDescription("Number of API calls"),
 	)
 	if err != nil {
@@ -94,7 +94,7 @@ func InitMetrics() error {
 	}
 
 	StreamDuration, err = meter.Float64Gauge(
-		"stream_duration_seconds",
+		"twitch.stream_duration_seconds",
 		metric.WithDescription("Duration of streams in seconds"),
 	)
 	if err != nil {
@@ -102,7 +102,7 @@ func InitMetrics() error {
 	}
 
 	SpotifySongChanged, err = meter.Int64Counter(
-		"spotify_song_changed_count",
+		"twitch.spotify_song_changed_count",
 		metric.WithDescription("Number of times the Spotify song changed"),
 	)
 	if err != nil {
@@ -110,7 +110,7 @@ func InitMetrics() error {
 	}
 
 	ChatMessageCount, err = meter.Int64Counter(
-		"chat_message_count",
+		"twitch.chat_message_count",
 		metric.WithDescription("Number of chat messages per stream"),
 	)
 	if err != nil {
@@ -119,7 +119,7 @@ func InitMetrics() error {
 
 	// Token lifecycle metrics
 	TokenRefreshTotal, err = meter.Int64Counter(
-		"token_refresh_total",
+		"twitch.token_refresh_total",
 		metric.WithDescription("Total token refresh attempts by type and result"),
 	)
 	if err != nil {
@@ -127,7 +127,7 @@ func InitMetrics() error {
 	}
 
 	TokenRefreshOn401, err = meter.Int64Counter(
-		"token_refresh_on_401_total",
+		"twitch.token_refresh_on_401_total",
 		metric.WithDescription("Token refreshes triggered by 401 responses"),
 	)
 	if err != nil {
@@ -135,7 +135,7 @@ func InitMetrics() error {
 	}
 
 	TokenValidationTotal, err = meter.Int64Counter(
-		"token_validation_total",
+		"twitch.token_validation_total",
 		metric.WithDescription("Token validation checks by type and validity"),
 	)
 	if err != nil {
@@ -143,7 +143,7 @@ func InitMetrics() error {
 	}
 
 	TokenTTLSeconds, err = meter.Float64Gauge(
-		"token_ttl_seconds",
+		"twitch.token_ttl_seconds",
 		metric.WithDescription("Remaining TTL of tokens in seconds"),
 	)
 	if err != nil {
@@ -152,7 +152,7 @@ func InitMetrics() error {
 
 	// Cache metrics
 	CacheOperationTotal, err = meter.Int64Counter(
-		"cache_operation_total",
+		"twitch.cache_operation_total",
 		metric.WithDescription("Cache operations by type and result"),
 	)
 	if err != nil {
@@ -161,7 +161,7 @@ func InitMetrics() error {
 
 	// Command and message metrics
 	CommandExecutedTotal, err = meter.Int64Counter(
-		"command_executed_total",
+		"twitch.command_executed_total",
 		metric.WithDescription("Chat commands executed by command name"),
 	)
 	if err != nil {
@@ -169,7 +169,7 @@ func InitMetrics() error {
 	}
 
 	MessageSentTotal, err = meter.Int64Counter(
-		"message_sent_total",
+		"twitch.message_sent_total",
 		metric.WithDescription("Messages sent to Twitch chat by result"),
 	)
 	if err != nil {
@@ -178,7 +178,7 @@ func InitMetrics() error {
 
 	// Notification metrics
 	NotificationSentTotal, err = meter.Int64Counter(
-		"notification_sent_total",
+		"twitch.notification_sent_total",
 		metric.WithDescription("Notifications sent by service and result"),
 	)
 	if err != nil {
@@ -187,7 +187,7 @@ func InitMetrics() error {
 
 	// Spotify operation metrics
 	SpotifyOperationTotal, err = meter.Int64Counter(
-		"spotify_operation_total",
+		"twitch.spotify_operation_total",
 		metric.WithDescription("Spotify API operations by type and result"),
 	)
 	if err != nil {
