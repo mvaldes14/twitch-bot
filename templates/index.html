@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="refresh" content="10" />
     <style>
+      :root {
+        --card-width: {{ .Width }};
+        --card-height: {{ .Height }};
+        --album-art-size: {{ .AlbumArtSize }};
+        --title-font-size: {{ .TitleFontSize }};
+        --artist-font-size: {{ .ArtistFontSize }};
+      }
+
       body {
         background-color: transparent; /* Transparent background for the page */
         color: #e0e0e0; /* Light text color (will be mostly for potential fallback or if other elements are added) */
@@ -24,8 +32,8 @@
       }
 
       .song-container {
-        width: 250px;
-        height: 100px;
+        width: var(--card-width);
+        height: var(--card-height);
         border: 1px solid #333;
         display: flex;
         align-items: center;
@@ -39,26 +47,40 @@
       }
 
       .album-art {
-        width: 80px;
-        height: 80px;
+        width: var(--album-art-size);
+        height: var(--album-art-size);
         margin-right: 10px;
         object-fit: cover;
         border-radius: 6px;
+        flex-shrink: 0;
       }
 
       .song-details {
         flex-grow: 1;
+        overflow: hidden;
       }
 
       .song-title {
-        font-size: 1em;
+        font-size: var(--title-font-size);
         font-weight: bold;
         margin-bottom: 2px;
+        word-wrap: break-word;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
 
       .song-artist {
-        font-size: 1em;
+        font-size: var(--artist-font-size);
         color: #bbb;
+        word-wrap: break-word;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
       }
     </style>
   </head>

@@ -40,9 +40,14 @@ type RequestJSON struct {
 
 // SongData represents the data for the song
 type SongData struct {
-	Title    string
-	Artist   string
-	AlbumArt string
+	Title         string
+	Artist        string
+	AlbumArt      string
+	Width         string
+	Height        string
+	AlbumArtSize  string
+	TitleFontSize string
+	ArtistFontSize string
 }
 
 // Router is the struct that handles all routes
@@ -653,7 +658,8 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 }
 
 // PlayingHandler displays music playing in spotify
-func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
+// Supports query parameters: ?size=full|half|small or ?width=Xpx&height=Ypx
+func (rt *Router) PlayingHandler(w http.ResponseWriter, r *http.Request) {
 	song, err := rt.Spotify.GetSong()
 	if err != nil {
 		rt.Log.Error("Failed to get current song", err)
@@ -670,10 +676,32 @@ func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+
+	// Parse query parameters for sizing
+	query := r.URL.Query()
+	width, height, albumArtSize, titleFontSize, artistFontSize := rt.getSizeDefaults()
+
+	if sizePreset := query.Get("size"); sizePreset != "" {
+		width, height, albumArtSize, titleFontSize, artistFontSize = rt.getSizePreset(sizePreset)
+	} else {
+		// Allow custom width/height
+		if customWidth := query.Get("width"); customWidth != "" {
+			width = customWidth
+		}
+		if customHeight := query.Get("height"); customHeight != "" {
+			height = customHeight
+		}
+	}
+
 	data := SongData{
-		Title:    song.Item.Name,
-		Artist:   song.Item.Artists[0].Name,
-		AlbumArt: song.Item.Album.Images[0].URL,
+		Title:          song.Item.Name,
+		Artist:         song.Item.Artists[0].Name,
+		AlbumArt:       song.Item.Album.Images[0].URL,
+		Width:          width,
+		Height:         height,
+		AlbumArtSize:   albumArtSize,
+		TitleFontSize:  titleFontSize,
+		ArtistFontSize: artistFontSize,
 	}
 	tmpl, err := template.ParseFiles("./templates/index.html")
 	if err != nil {
@@ -685,6 +713,27 @@ func (rt *Router) PlayingHandler(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		http.Error(w, "Error executing template", http.StatusInternalServerError)
 		return
+	}
+}
+
+// getSizeDefaults returns default size values
+func (rt *Router) getSizeDefaults() (string, string, string, string, string) {
+	return "250px", "100px", "80px", "1em", "1em"
+}
+
+// getSizePreset returns sizing based on preset names
+func (rt *Router) getSizePreset(preset string) (string, string, string, string, string) {
+	switch preset {
+	case "full":
+		return "100vw", "100vh", "40vh", "3em", "2em"
+	case "half":
+		return "50vw", "50vh", "20vh", "2.5em", "1.8em"
+	case "large":
+		return "600px", "400px", "300px", "2em", "1.5em"
+	case "small":
+		return "200px", "80px", "60px", "0.9em", "0.8em"
+	default:
+		return rt.getSizeDefaults()
 	}
 }
 
