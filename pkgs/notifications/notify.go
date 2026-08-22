@@ -65,6 +65,8 @@ func (n *NotificationService) sendDiscord(ctx context.Context, msg string) error
 		return err
 	}
 
+	// The destination is operator-supplied deployment config, never user input.
+	// #nosec G704 -- DISCORD_WEBHOOK is trusted deployment config
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payload))
 	if err != nil {
 		n.Log.Error("Failed to generate payload for discord", err)
@@ -72,6 +74,7 @@ func (n *NotificationService) sendDiscord(ctx context.Context, msg string) error
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	// #nosec G704 -- request target is DISCORD_WEBHOOK, trusted deployment config
 	resp, err := n.Client.Do(req)
 	if err != nil {
 		n.Log.Error("Failed to send discord request", err)
@@ -112,12 +115,16 @@ func (n *NotificationService) sendGotify(ctx context.Context, msg string) error 
 		return err
 	}
 
+	// Host is a compile-time constant; only the token comes from the
+	// operator's environment.
+	// #nosec G704 -- gotifyURL is a constant host, token is trusted config
 	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s?token=%s", gotifyURL, token), &body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
+	// #nosec G704 -- request target is the constant gotify host
 	resp, err := n.Client.Do(req)
 	if err != nil {
 		telemetry.IncrementNotificationSent(ctx, "gotify", "error")
