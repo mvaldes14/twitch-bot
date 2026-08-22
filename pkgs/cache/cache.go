@@ -27,16 +27,22 @@ type Token struct {
 	Expiration time.Duration
 }
 
+// pingTimeout bounds the connectivity check performed at startup.
+const pingTimeout = 5 * time.Second
+
 var (
-	ctx           = context.Background()
 	rdb           *redis.Client
 	errorNoToken  = errors.New("no token found for the given key")
 	cacheInstance *Service
+	initErr       error
 	once          sync.Once
 )
 
-// NewCacheService initializes a new CacheService instance (singleton)
-func NewCacheService() *Service {
+// NewCacheService initializes a new CacheService instance (singleton).
+// Connectivity is verified once and the same result is handed to every caller,
+// so a Redis outage at startup surfaces as an error the caller can act on
+// rather than a panic from inside a constructor.
+func NewCacheService() (*Service, error) {
 	once.Do(func() {
 		redisURL := os.Getenv("REDIS_URL")
 
@@ -44,18 +50,31 @@ func NewCacheService() *Service {
 		rdb = redis.NewClient(&redis.Options{
 			Addr: redisURL,
 		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+		defer cancel()
 		if _, err := rdb.Ping(ctx).Result(); err != nil {
-			panic("Could not connect to Redis: " + err.Error())
+			initErr = fmt.Errorf("could not connect to Redis at %q: %w", redisURL, err)
+			return
 		}
 		logger.Info("Connected to Redis successfully")
 		cacheInstance = &Service{Log: logger}
 	})
-	return cacheInstance
+	return cacheInstance, initErr
+}
+
+// Close releases the Redis connection pool. It is safe to call even when the
+// client was never initialized.
+func Close() error {
+	if rdb == nil {
+		return nil
+	}
+	return rdb.Close()
 }
 
 // GetToken retrieves a token from Redis
-func (c *Service) GetToken(key string) (string, error) {
-	_, span := telemetry.StartSpan(ctx, "redis.get_token",
+func (c *Service) GetToken(ctx context.Context, key string) (string, error) {
+	ctx, span := telemetry.StartSpan(ctx, "redis.get_token",
 		attribute.String("cache.key", key),
 	)
 	defer span.End()
@@ -88,8 +107,8 @@ func (c *Service) GetToken(key string) (string, error) {
 }
 
 // StoreToken stores a key token in Redis
-func (c *Service) StoreToken(tk Token) error {
-	_, span := telemetry.StartSpan(ctx, "redis.store_token",
+func (c *Service) StoreToken(ctx context.Context, tk Token) error {
+	ctx, span := telemetry.StartSpan(ctx, "redis.store_token",
 		attribute.String("cache.key", tk.Key),
 		attribute.Int64("cache.expiration_seconds", int64(tk.Expiration.Seconds())),
 	)
@@ -114,8 +133,8 @@ func (c *Service) StoreToken(tk Token) error {
 }
 
 // DeleteToken removes a token from Redis
-func (c *Service) DeleteToken(key string) error {
-	_, span := telemetry.StartSpan(ctx, "redis.delete_token",
+func (c *Service) DeleteToken(ctx context.Context, key string) error {
+	ctx, span := telemetry.StartSpan(ctx, "redis.delete_token",
 		attribute.String("cache.key", key),
 	)
 	defer span.End()

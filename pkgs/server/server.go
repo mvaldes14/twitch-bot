@@ -2,6 +2,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -10,11 +11,18 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 )
 
-// NewServer creates the http server
-func NewServer(port string) *http.Server {
-	secretService := secrets.NewSecretService()
-	subs := subscriptions.NewSubscription(secretService)
-	rs := routes.NewRouter(subs, secretService)
+// NewServer creates the http server.
+// The caller owns the SecretService so the handlers share the same instance
+// whose tokens the background renewal goroutine refreshes.
+func NewServer(port string, secretService *secrets.SecretService) (*http.Server, error) {
+	subs, err := subscriptions.NewSubscription(secretService)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build subscription service: %w", err)
+	}
+	rs, err := routes.NewRouter(subs, secretService)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build router: %w", err)
+	}
 	api := http.NewServeMux()
 	api.HandleFunc("POST /create", rs.CreateHandler)
 	api.HandleFunc("POST /delete", rs.DeleteHandler)
@@ -41,5 +49,5 @@ func NewServer(port string) *http.Server {
 		Handler:           rs.TracingMiddleware(rs.MiddleWareRoute(router)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	return srv
+	return srv, nil
 }

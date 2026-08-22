@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
+	"github.com/mvaldes14/twitch-bot/pkgs/httpclient"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 )
@@ -32,26 +33,29 @@ type Subscription struct {
 	Cache   *cache.Service
 }
 
-// NewSubscription creates a new subscription
-func NewSubscription(secretService *secrets.SecretService) *Subscription {
+// NewSubscription creates a new subscription.
+// It fails if the Redis cache is unreachable.
+func NewSubscription(secretService *secrets.SecretService) (*Subscription, error) {
 	log := telemetry.NewLogger("subscriptions")
-	cacheService := cache.NewCacheService()
+	cacheService, err := cache.NewCacheService()
+	if err != nil {
+		return nil, fmt.Errorf("subscription service requires a reachable cache: %w", err)
+	}
 	return &Subscription{
 		Secrets: secretService,
 		Log:     log,
 		Cache:   cacheService,
-	}
+	}, nil
 }
 
 // CreateSubscription Generates a new subscription on an event type
 // Validates headers exist before making API call
-func (s *Subscription) CreateSubscription(payload string) error {
-	ctx := context.Background()
-	_, span := telemetry.StartSpan(ctx, "subscription.create")
+func (s *Subscription) CreateSubscription(ctx context.Context, payload string) error {
+	ctx, span := telemetry.StartSpan(ctx, "subscription.create")
 	defer span.End()
 
 	// Validate Twitch API credentials before attempting subscription creation
-	headers, err := s.Secrets.BuildSecretHeaders()
+	headers, err := s.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		errMsg := fmt.Errorf("cannot create subscription without valid Twitch credentials: %w", err)
 		s.Log.Error("Subscription creation failed - missing required credentials (TWITCH_APP_TOKEN or TWITCH_CLIENT_ID)", errMsg)
@@ -70,11 +74,9 @@ func (s *Subscription) CreateSubscription(payload string) error {
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 
-	// Create an HTTP client
-	client := &http.Client{}
 	// Send the request and get the response
 	s.Log.Info("Sending request for subscription for:" + payload)
-	resp, err := client.Do(req)
+	resp, err := httpclient.Shared.Do(req)
 	if err != nil {
 		s.Log.Error("Error sending request for new subscription", err)
 		return fmt.Errorf("failed to send request: %w", err)
@@ -117,13 +119,12 @@ func (s *Subscription) CreateSubscription(payload string) error {
 
 // GetSubscriptions Retrieves all subscriptions for the application
 // Validates headers exist before making API call
-func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
-	ctx := context.Background()
-	_, span := telemetry.StartSpan(ctx, "subscription.get_all")
+func (s *Subscription) GetSubscriptions(ctx context.Context) (ValidateSubscription, error) {
+	ctx, span := telemetry.StartSpan(ctx, "subscription.get_all")
 	defer span.End()
 
 	// Validate Twitch API credentials before attempting to list subscriptions
-	headers, err := s.Secrets.BuildSecretHeaders()
+	headers, err := s.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		errMsg := fmt.Errorf("cannot list subscriptions without valid Twitch credentials: %w", err)
 		s.Log.Error("Cannot list subscriptions - Twitch API credentials (TWITCH_APP_TOKEN) missing from Redis cache or TWITCH_CLIENT_ID missing from environment", errMsg)
@@ -140,8 +141,7 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpclient.Shared.Do(req)
 	if err != nil {
 		s.Log.Error("Error sending request:", err)
 		return ValidateSubscription{}, fmt.Errorf("failed to send request: %w", err)
@@ -179,48 +179,60 @@ func (s *Subscription) GetSubscriptions() (ValidateSubscription, error) {
 
 // DeleteSubscriptions Removes all existing subscriptions
 // Validates headers exist before making API call for each subscription
-func (s *Subscription) DeleteSubscriptions(subs ValidateSubscription) error {
-	ctx := context.Background()
-	_, span := telemetry.StartSpan(ctx, "subscription.delete_all")
+func (s *Subscription) DeleteSubscriptions(ctx context.Context, subs ValidateSubscription) error {
+	ctx, span := telemetry.StartSpan(ctx, "subscription.delete_all")
 	defer span.End()
 
-	if subs.Total > 0 {
-		for _, sub := range subs.Data {
-			// Validate Twitch API credentials before attempting deletion
-			headers, err := s.Secrets.BuildSecretHeaders()
-			if err != nil {
-				errMsg := fmt.Errorf("cannot delete subscription without valid Twitch credentials: %w", err)
-				s.Log.Error(fmt.Sprintf("Skipping subscription deletion - headers missing: %v", err), errMsg)
-				telemetry.RecordError(span, errMsg)
-				continue
-			}
-
-			deleteURL := fmt.Sprintf("%v?id=%v", URL, sub.ID)
-			req, err := http.NewRequestWithContext(ctx, "DELETE", deleteURL, nil)
-			if err != nil {
-				return errFailedToFormRequest
-			}
-
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+headers.Token)
-			req.Header.Set("Client-Id", headers.ClientID)
-
-			s.Log.Info("Deleting subscription:" + sub.ID)
-			client := &http.Client{}
-			resp, err := client.Do(req)
-			if err != nil {
-				s.Log.Error("Error deleting subscription:", err)
-				continue
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusNoContent {
-				s.Log.Info("Subscription deleted:" + sub.ID)
-			} else {
-				s.Log.Error("Failed to delete subscription", errFailedSubscriptionDeletion)
-			}
-		}
-	} else {
+	if subs.Total == 0 {
 		s.Log.Info("No subscriptions to delete")
+		return nil
 	}
+
+	var errs []error
+	for _, sub := range subs.Data {
+		if err := s.deleteSubscription(ctx, sub.ID); err != nil {
+			telemetry.RecordError(span, err)
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// deleteSubscription removes a single subscription. It is a separate function
+// so the response body is closed on each iteration rather than at the end of
+// the enclosing loop.
+func (s *Subscription) deleteSubscription(ctx context.Context, id string) error {
+	// Validate Twitch API credentials before attempting deletion
+	headers, err := s.Secrets.BuildSecretHeaders(ctx)
+	if err != nil {
+		errMsg := fmt.Errorf("cannot delete subscription %s without valid Twitch credentials: %w", id, err)
+		s.Log.Error(fmt.Sprintf("Skipping subscription deletion - headers missing: %v", err), errMsg)
+		return errMsg
+	}
+
+	deleteURL := fmt.Sprintf("%v?id=%v", URL, id)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", deleteURL, nil)
+	if err != nil {
+		return errFailedToFormRequest
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+headers.Token)
+	req.Header.Set("Client-Id", headers.ClientID)
+
+	s.Log.Info("Deleting subscription:" + id)
+	resp, err := httpclient.Shared.Do(req)
+	if err != nil {
+		s.Log.Error("Error deleting subscription:", err)
+		return fmt.Errorf("failed to delete subscription %s: %w", id, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		s.Log.Error("Failed to delete subscription", errFailedSubscriptionDeletion)
+		return fmt.Errorf("%w: id %s returned status %d", errFailedSubscriptionDeletion, id, resp.StatusCode)
+	}
+
+	s.Log.Info("Subscription deleted:" + id)
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/httpclient"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
@@ -30,6 +31,12 @@ var (
 	errUnauthorized  = errors.New("401 unauthorized: token expired")
 )
 
+// channelTags are the tags applied to the channel by the !today command.
+var channelTags = []string{
+	"devops", "Español", "SpanishAndEnglish", "coding", "neovim",
+	"k8s", "terraform", "go", "homelab", "nix", "gaming",
+}
+
 // Actions handles all Twitch chat actions and commands
 type Actions struct {
 	Log     *telemetry.CustomLogger
@@ -37,90 +44,92 @@ type Actions struct {
 	Spotify *spotify.Spotify
 }
 
-// NewActions creates a new Actions instance
-func NewActions(secretService *secrets.SecretService) *Actions {
+// NewActions creates a new Actions instance.
+// It fails if the Spotify client cannot be constructed.
+func NewActions(secretService *secrets.SecretService) (*Actions, error) {
 	logger := telemetry.NewLogger("actions")
-	spotifyClient := spotify.NewSpotify()
+	spotifyClient, err := spotify.NewSpotify()
+	if err != nil {
+		return nil, fmt.Errorf("actions require a spotify client: %w", err)
+	}
 	return &Actions{
 		Log:     logger,
 		Secrets: secretService,
 		Spotify: spotifyClient,
+	}, nil
+}
+
+// say sends a chat message and logs any failure. Chat replies are best effort:
+// a failed reply is reported but must not abort processing of the message.
+func (a *Actions) say(ctx context.Context, text string) {
+	if err := a.SendMessage(ctx, text); err != nil {
+		a.Log.Error("Failed to send chat message", err)
 	}
 }
 
 // ParseMessage Parses the incoming messages from stream
-func (a *Actions) ParseMessage(msg subscriptions.ChatMessageEvent) {
-	ctx := context.Background()
+func (a *Actions) ParseMessage(ctx context.Context, msg subscriptions.ChatMessageEvent) {
 	payload := fmt.Sprintf("%s: %s", msg.Event.ChatterUserName, msg.Event.Message.Text)
 	a.Log.Chat(payload)
 	// Simple commands
 	switch msg.Event.Message.Text {
 	case "!commands":
 		telemetry.IncrementCommandExecuted(ctx, "commands")
-		_ = a.SendMessage("!github, !dotfiles, !song, !social, !blog, !youtube ")
+		a.say(ctx, "!github, !dotfiles, !song, !social, !blog, !youtube ")
 	case "!github":
 		telemetry.IncrementCommandExecuted(ctx, "github")
-		_ = a.SendMessage("https://links.mvaldes.dev/gh")
+		a.say(ctx, "https://links.mvaldes.dev/gh")
 	case "!dotfiles":
 		telemetry.IncrementCommandExecuted(ctx, "dotfiles")
-		_ = a.SendMessage("https://links.mvaldes.dev/dotfiles")
+		a.say(ctx, "https://links.mvaldes.dev/dotfiles")
 	case "!test":
 		telemetry.IncrementCommandExecuted(ctx, "test")
-		_ = a.SendMessage("Test Me")
+		a.say(ctx, "Test Me")
 	case "!social":
 		telemetry.IncrementCommandExecuted(ctx, "social")
-		_ = a.SendMessage("https://links.mvaldes.dev/twitter")
+		a.say(ctx, "https://links.mvaldes.dev/twitter")
 	case "!blog":
 		telemetry.IncrementCommandExecuted(ctx, "blog")
-		_ = a.SendMessage("https://mvaldes.dev")
+		a.say(ctx, "https://mvaldes.dev")
 	case "!discord":
 		telemetry.IncrementCommandExecuted(ctx, "discord")
-		_ = a.SendMessage("https://links.mvaldes.dev/discord")
+		a.say(ctx, "https://links.mvaldes.dev/discord")
 	case "!youtube":
 		telemetry.IncrementCommandExecuted(ctx, "youtube")
-		_ = a.SendMessage("https://links.mvaldes.dev/youtube")
+		a.say(ctx, "https://links.mvaldes.dev/youtube")
 	case "!song":
 		telemetry.IncrementCommandExecuted(ctx, "song")
-		song, err := a.Spotify.GetSong()
+		song, err := a.Spotify.GetSong(ctx)
 		if err != nil {
 			a.Log.Error("Failed to get current song", err)
-			_ = a.SendMessage("Sorry, couldn't get the current song")
+			a.say(ctx, "Sorry, couldn't get the current song")
 			return
 		}
 		if song.Item.Name == "" || len(song.Item.Artists) == 0 {
-			_ = a.SendMessage("No song currently playing")
+			a.say(ctx, "No song currently playing")
 			return
 		}
 		songMsg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
 		a.Log.Info(songMsg)
-		_ = a.SendMessage(songMsg)
+		a.say(ctx, songMsg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
 		telemetry.IncrementCommandExecuted(ctx, "today")
 		a.Log.Info("Today command running")
-		a.updateChannel(msg)
+		a.updateChannel(ctx, msg)
 	}
 }
 
 // SendMessage sends a message to the Twitch chat room.
 // On 401 Unauthorized, it triggers a token refresh and retries once.
-// Validates headers exist before making API call
-func (a *Actions) SendMessage(text string) error {
-	ctx := context.Background()
-	_, span := telemetry.StartExternalSpan(ctx, "twitch.send_message", "twitch", "send_message")
+func (a *Actions) SendMessage(ctx context.Context, text string) error {
+	ctx, span := telemetry.StartExternalSpan(ctx, "twitch.send_message", "twitch", "send_message")
 	defer span.End()
 
-	// Validate Twitch API credentials before attempting message send
-	_, err := a.Secrets.BuildSecretHeaders()
-	if err != nil {
-		errMsg := fmt.Errorf("cannot send message to Twitch chat without valid API credentials: %w", err)
-		a.Log.Error("Cannot send message to Twitch chat - API credentials missing", errMsg)
-		telemetry.RecordError(span, errMsg)
-		return errMsg
-	}
-
-	err = a.sendMessageInternal(ctx, text)
+	// sendMessageInternal builds and validates the credentials for each
+	// attempt, so the retry below picks up a freshly refreshed token.
+	err := a.sendMessageInternal(ctx, text)
 	if err == nil {
 		telemetry.IncrementMessageSent(ctx, "success")
 		return nil
@@ -131,7 +140,7 @@ func (a *Actions) SendMessage(text string) error {
 		a.Log.Info("Got 401 sending message, refreshing app token and retrying")
 		telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
 		telemetry.IncrementTokenRefreshOn401(ctx, "send_message")
-		if refreshErr := a.Secrets.RefreshAppTokenAndStore(); refreshErr != nil {
+		if refreshErr := a.Secrets.RefreshAppTokenAndStore(ctx); refreshErr != nil {
 			a.Log.Error("Failed to refresh app token after 401", refreshErr)
 			telemetry.RecordError(span, refreshErr)
 			telemetry.IncrementMessageSent(ctx, "error")
@@ -172,7 +181,7 @@ func (a *Actions) sendMessageInternal(ctx context.Context, text string) error {
 	}
 
 	// Validate headers exist before making API call
-	headers, err := a.Secrets.BuildSecretHeaders()
+	headers, err := a.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		headerErr := fmt.Errorf("failed to build required headers for sending message: %w", err)
 		a.Log.Error("Cannot send message - missing required credentials", headerErr)
@@ -183,8 +192,7 @@ func (a *Actions) sendMessageInternal(ctx context.Context, text string) error {
 	req.Header.Set("Authorization", "Bearer "+headers.Token)
 	req.Header.Set("Client-Id", headers.ClientID)
 
-	client := &http.Client{}
-	res, err := client.Do(req)
+	res, err := httpclient.Shared.Do(req)
 	if err != nil {
 		a.Log.Error("failed to send message", err)
 		return err
@@ -204,9 +212,16 @@ func (a *Actions) sendMessageInternal(ctx context.Context, text string) error {
 	return nil
 }
 
-func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
-	ctx := context.Background()
-	_, span := telemetry.StartExternalSpan(ctx, "twitch.update_channel", "twitch", "update_channel")
+// channelUpdate is the payload sent to the Twitch channels endpoint.
+type channelUpdate struct {
+	GameID              string   `json:"game_id"`
+	Title               string   `json:"title"`
+	Tags                []string `json:"tags"`
+	BroadcasterLanguage string   `json:"broadcaster_language"`
+}
+
+func (a *Actions) updateChannel(ctx context.Context, action subscriptions.ChatMessageEvent) {
+	ctx, span := telemetry.StartExternalSpan(ctx, "twitch.update_channel", "twitch", "update_channel")
 	defer span.End()
 
 	a.Log.Info("Changing the channel information")
@@ -215,29 +230,26 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		return
 	}
 
-	// Validate Twitch API credentials before attempting channel update
-	_, err := a.Secrets.BuildSecretHeaders()
-	if err != nil {
-		errMsg := fmt.Errorf("cannot update channel without valid API credentials: %w", err)
-		a.Log.Error("Cannot update channel - API credentials missing", errMsg)
-		telemetry.RecordError(span, errMsg)
-		return
-	}
-
-	// Build the new payload
+	// Build the new payload. The title comes from chat, so it is marshalled
+	// rather than formatted into a JSON literal.
 	splitMsg := strings.Split(action.Event.Message.Text, " ")
 	msg := strings.Join(splitMsg[1:], " ")
-	payloadBody := fmt.Sprintf(`{
-      "game_id":"%v",
-      "title":"🚨[Devops]🚨- %v",
-      "tags":["devops","Español","SpanishAndEnglish","coding","neovim","k8s","terraform","go","homelab", "nix", "gaming"],
-      "broadcaster_language":"es"}`,
-		softwareID, msg)
+	payloadBody, err := json.Marshal(channelUpdate{
+		GameID:              strconv.Itoa(softwareID),
+		Title:               fmt.Sprintf("🚨[Devops]🚨- %s", msg),
+		Tags:                channelTags,
+		BroadcasterLanguage: "es",
+	})
+	if err != nil {
+		a.Log.Error("Could not marshal channel update payload", err)
+		telemetry.RecordError(span, err)
+		return
+	}
 	a.Log.Info("Today Command Ran")
 
 	const maxAttempts = 2
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.twitch.tv/helix/channels?broadcaster_id="+userID, bytes.NewBuffer([]byte(payloadBody)))
+		req, err := http.NewRequestWithContext(ctx, "PATCH", channelsEndpoint+"?broadcaster_id="+userID, bytes.NewBuffer(payloadBody))
 		if err != nil {
 			a.Log.Error("Could not form request to update channel info", err)
 			telemetry.RecordError(span, err)
@@ -245,7 +257,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		}
 
 		// Validate headers exist before making API call
-		headers, err := a.Secrets.BuildSecretHeaders()
+		headers, err := a.Secrets.BuildSecretHeaders(ctx)
 		if err != nil {
 			headerErr := fmt.Errorf("failed to build required headers for updating channel: %w", err)
 			a.Log.Error("Cannot update channel - missing required credentials", headerErr)
@@ -253,7 +265,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			return
 		}
 
-		userToken, err := a.Secrets.GetUserToken()
+		userToken, err := a.Secrets.GetUserToken(ctx)
 		if err != nil {
 			headerErr := fmt.Errorf("failed to get user token from cache: %w", err)
 			a.Log.Error("Cannot update channel - user token missing from cache", headerErr)
@@ -265,8 +277,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 		req.Header.Set("Authorization", "Bearer "+userToken)
 		req.Header.Set("Client-Id", headers.ClientID)
 
-		client := &http.Client{}
-		res, err := client.Do(req)
+		res, err := httpclient.Shared.Do(req)
 		if err != nil {
 			a.Log.Error("Request could not be sent to update channel", err)
 			telemetry.RecordError(span, err)
@@ -285,7 +296,7 @@ func (a *Actions) updateChannel(action subscriptions.ChatMessageEvent) {
 			a.Log.Info("Got 401 updating channel, refreshing user token and retrying")
 			telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
 			telemetry.IncrementTokenRefreshOn401(ctx, "update_channel")
-			if refreshErr := a.Secrets.RefreshUserTokenAndStore(); refreshErr != nil {
+			if refreshErr := a.Secrets.RefreshUserTokenAndStore(ctx); refreshErr != nil {
 				a.Log.Error("Failed to refresh user token after 401", refreshErr)
 				telemetry.RecordError(span, refreshErr)
 				return
