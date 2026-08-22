@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/httpclient"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 )
 
@@ -19,9 +20,22 @@ const (
 	url         = "https://api.twitch.tv/helix/eventsub/subscriptions"
 )
 
+// endpointPaths maps a subscription name to the callback path Twitch should
+// call back on. Keys must match the Name field of every entry in
+// subscriptionTypes, and values must match the paths registered in
+// server.NewServer, or Twitch will call back to a route that does not exist.
+var endpointPaths = map[string]string{
+	"subscribe": "sub",
+	"chat":      "chat",
+	"follow":    "follow",
+	"cheer":     "cheer",
+	"reward":    "reward",
+	"streamon":  "stream-online",
+	"streamoff": "stream-offline",
+}
+
 // MakeRequestMarshallJSON receives a request and marshals the response into a struct
-func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
-	ctx := context.Background()
+func (rt *Router) MakeRequestMarshallJSON(ctx context.Context, r *RequestJSON, jsonType any) error {
 	req, err := http.NewRequestWithContext(ctx, r.Method, r.URL, bytes.NewBuffer([]byte(r.Payload)))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -29,11 +43,9 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 	for k, v := range r.Headers {
 		req.Header.Set(k, v)
 	}
-	// Create an HTTP client
-	client := &http.Client{}
 	// Send the request and get the response
 	rt.Log.Info("Sending request to Twitch API")
-	resp, err := client.Do(req)
+	resp, err := httpclient.Shared.Do(req)
 	if err != nil {
 		rt.Log.Error("Error sending request to Twitch:", err)
 		return err
@@ -46,8 +58,9 @@ func (rt *Router) MakeRequestMarshallJSON(r *RequestJSON, jsonType any) error {
 	return json.Unmarshal(body, jsonType)
 }
 
-// GeneratePayload Builds the payload for each subscription type
-func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string {
+// GeneratePayload Builds the payload for each subscription type.
+// It fails rather than emitting a callback URL with an empty path.
+func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) (string, error) {
 	rt.Log.Info("Generating payload for subscription type")
 
 	// Define the condition based on subscription type
@@ -60,19 +73,14 @@ func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string
 		condition["user_id"] = userID
 	case "follow":
 		condition["moderator_user_id"] = userID
-	case "subscribe", "cheer", "reward", "stream":
+	case "subscribe", "cheer", "reward", "streamon", "streamoff":
 	}
 
-	// Map subscription names to their endpoint paths
-	endpointPath := map[string]string{
-		"subscribe": "sub",
-		"chat":      "chat",
-		"follow":    "follow",
-		"cheer":     "cheer",
-		"reward":    "reward",
-		"streamon":  "stream-online",
-		"streamoff": "stream-offline",
-	}[subType.Name]
+	endpointPath, ok := endpointPaths[subType.Name]
+	if !ok {
+		rt.Log.Error("No callback path registered for subscription name: "+subType.Name, errorUnknownSubscriptionName)
+		return "", errorUnknownSubscriptionName
+	}
 
 	// Create a struct for the payload
 	payloadStruct := struct {
@@ -100,6 +108,9 @@ func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) string
 	}
 
 	// Marshal the entire payload
-	payloadJSON, _ := json.Marshal(payloadStruct)
-	return string(payloadJSON)
+	payloadJSON, err := json.Marshal(payloadStruct)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal subscription payload: %w", err)
+	}
+	return string(payloadJSON), nil
 }

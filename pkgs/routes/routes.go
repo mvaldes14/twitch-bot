@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"text/template"
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
+	"github.com/mvaldes14/twitch-bot/pkgs/httpclient"
 	"github.com/mvaldes14/twitch-bot/pkgs/notifications"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
@@ -26,9 +28,50 @@ const (
 )
 
 var (
-	errorInvalidSbuscription = errors.New("could not generate a valid subscription")
-	errorNoMusicPlaying      = errors.New("nothing is playing on spotify")
+	errorInvalidSbuscription     = errors.New("could not generate a valid subscription")
+	errorNoMusicPlaying          = errors.New("nothing is playing on spotify")
+	errorUnknownSubscriptionName = errors.New("no callback path registered for subscription name")
 )
+
+// subscriptionTypes maps a requested subscription type to its Twitch EventSub
+// config. Every Name here must have a matching entry in endpointPaths.
+var subscriptionTypes = map[string]subscriptions.SubscriptionType{
+	"chat": {
+		Name:    "chat",
+		Version: "1",
+		Type:    "channel.chat.message",
+	},
+	"follow": {
+		Name:    "follow",
+		Version: "2",
+		Type:    "channel.follow",
+	},
+	"subscription": {
+		Name:    "subscribe",
+		Version: "1",
+		Type:    "channel.subscribe",
+	},
+	"cheer": {
+		Name:    "cheer",
+		Version: "1",
+		Type:    "channel.cheer",
+	},
+	"reward": {
+		Name:    "reward",
+		Version: "1",
+		Type:    "channel.channel_points_custom_reward_redemption.add",
+	},
+	"streamon": {
+		Name:    "streamon",
+		Version: "1",
+		Type:    "stream.online",
+	},
+	"streamoff": {
+		Name:    "streamoff",
+		Version: "1",
+		Type:    "stream.offline",
+	},
+}
 
 // RequestJSON represents a JSON HTTP request
 type RequestJSON struct {
@@ -40,26 +83,30 @@ type RequestJSON struct {
 
 // SongData represents the data for the song
 type SongData struct {
-	Title         string
-	Artist        string
-	AlbumArt      string
-	Width         string
-	Height        string
-	AlbumArtSize  string
-	TitleFontSize string
+	Title          string
+	Artist         string
+	AlbumArt       string
+	Width          string
+	Height         string
+	AlbumArtSize   string
+	TitleFontSize  string
 	ArtistFontSize string
 }
 
 // Router is the struct that handles all routes
 type Router struct {
-	Subs            *subscriptions.Subscription
-	Secrets         *secrets.SecretService
-	Actions         *actions.Actions
-	Spotify         *spotify.Spotify
-	Log             *telemetry.CustomLogger
-	Notification    *notifications.NotificationService
-	streamStartTime time.Time
-	Cache           *cache.Service
+	Subs         *subscriptions.Subscription
+	Secrets      *secrets.SecretService
+	Actions      *actions.Actions
+	Spotify      *spotify.Spotify
+	Log          *telemetry.CustomLogger
+	Notification *notifications.NotificationService
+	Cache        *cache.Service
+
+	// streamStartTime holds the stream start as unix nanoseconds, or 0 when no
+	// stream is in progress. A single Router is shared across every request
+	// goroutine and Twitch retries webhook deliveries, so access is atomic.
+	streamStartTime atomic.Int64
 }
 
 // SubscriptionTypeRequest is the struct for generating new subscriptions
@@ -67,13 +114,23 @@ type SubscriptionTypeRequest struct {
 	Type string `json:"type"`
 }
 
-// NewRouter creates a new router
-func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) *Router {
-	actionsService := actions.NewActions(secretService)
-	spotifyClient := spotify.NewSpotify()
+// NewRouter creates a new router.
+// It fails if any of its dependencies cannot be constructed.
+func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretService) (*Router, error) {
+	actionsService, err := actions.NewActions(secretService)
+	if err != nil {
+		return nil, fmt.Errorf("router requires an actions service: %w", err)
+	}
+	spotifyClient, err := spotify.NewSpotify()
+	if err != nil {
+		return nil, fmt.Errorf("router requires a spotify client: %w", err)
+	}
+	cacheService, err := cache.NewCacheService()
+	if err != nil {
+		return nil, fmt.Errorf("router requires a reachable cache: %w", err)
+	}
 	notify := notifications.NewNotificationService()
 	logger := telemetry.NewLogger("router")
-	cacheService := cache.NewCacheService()
 	return &Router{
 		Log:          logger,
 		Subs:         subs,
@@ -82,7 +139,7 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 		Spotify:      spotifyClient,
 		Notification: notify,
 		Cache:        cacheService,
-	}
+	}, nil
 }
 
 // CheckAuthAdmin validates authorization headers for admin routes
@@ -200,14 +257,15 @@ func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteHandler deletes all subscriptions
-func (rt *Router) DeleteHandler(w http.ResponseWriter, _ *http.Request) {
-	subsList, err := rt.Subs.GetSubscriptions()
+func (rt *Router) DeleteHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	subsList, err := rt.Subs.GetSubscriptions(ctx)
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	err = rt.Subs.DeleteSubscriptions(subsList)
+	err = rt.Subs.DeleteSubscriptions(ctx, subsList)
 	if err != nil {
 		rt.Log.Error("Could not delete subscriptions", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -222,8 +280,8 @@ func (rt *Router) HealthHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // ListHandler returns the current subscription list
-func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
-	subsList, err := rt.Subs.GetSubscriptions()
+func (rt *Router) ListHandler(w http.ResponseWriter, r *http.Request) {
+	subsList, err := rt.Subs.GetSubscriptions(r.Context())
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -252,7 +310,7 @@ func (rt *Router) ListHandler(w http.ResponseWriter, _ *http.Request) {
 
 // CreateHandler creates a subscription based on the parameter
 func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
-	_, span := telemetry.StartSpan(r.Context(), "create_subscription")
+	ctx, span := telemetry.StartSpan(r.Context(), "create_subscription")
 	defer span.End()
 
 	rt.Log.Info("Received create subscription request")
@@ -280,44 +338,6 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.String("subscription.type_requested", requestTypeString.Type),
 	)
 
-	subscriptionTypes := map[string]subscriptions.SubscriptionType{
-		"chat": {
-			Name:    "chat",
-			Version: "1",
-			Type:    "channel.chat.message",
-		},
-		"follow": {
-			Name:    "follow",
-			Version: "2",
-			Type:    "channel.follow",
-		},
-		"subscription": {
-			Name:    "subscribe",
-			Version: "1",
-			Type:    "channel.subscribe",
-		},
-		"cheer": {
-			Name:    "cheer",
-			Version: "1",
-			Type:    "channel.cheer",
-		},
-		"reward": {
-			Name:    "reward",
-			Version: "1",
-			Type:    "channel.channel_points_custom_reward_redemption.add",
-		},
-		"streamon": {
-			Name:    "stream",
-			Version: "1",
-			Type:    "stream.online",
-		},
-		"streamoff": {
-			Name:    "stream",
-			Version: "1",
-			Type:    "stream.offline",
-		},
-	}
-
 	if subTypeConfig, ok := subscriptionTypes[requestTypeString.Type]; ok {
 		telemetry.AddSpanAttributes(span,
 			attribute.String("subscription.config_name", subTypeConfig.Name),
@@ -325,9 +345,15 @@ func (rt *Router) CreateHandler(w http.ResponseWriter, r *http.Request) {
 			attribute.String("subscription.config_type", subTypeConfig.Type),
 		)
 
-		payload := rt.GeneratePayload(subTypeConfig)
+		payload, err := rt.GeneratePayload(subTypeConfig)
+		if err != nil {
+			rt.Log.Error(fmt.Sprintf("Failed to build payload for type: %s", requestTypeString.Type), err)
+			telemetry.RecordError(span, err)
+			http.Error(w, "Failed to build subscription payload", http.StatusInternalServerError)
+			return
+		}
 
-		if err := rt.Subs.CreateSubscription(payload); err != nil {
+		if err := rt.Subs.CreateSubscription(ctx, payload); err != nil {
 			rt.Log.Error(fmt.Sprintf("Failed to create subscription for type: %s", requestTypeString.Type), err)
 			telemetry.RecordError(span, err)
 			telemetry.AddSpanAttributes(span,
@@ -386,7 +412,7 @@ func (rt *Router) ChatHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	//	Send to parser to respond
-	rt.Actions.ParseMessage(chatEvent)
+	rt.Actions.ParseMessage(ctx, chatEvent)
 	rt.Log.Info(fmt.Sprintf("Successfully processed chat message from: %s", chatEvent.Event.ChatterUserName))
 }
 
@@ -420,7 +446,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	// Send to chat
-	if err := rt.Actions.SendMessage(fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName)); err != nil {
+	if err := rt.Actions.SendMessage(ctx, fmt.Sprintf("Gracias por el follow: %v", followEventResponse.Event.UserName)); err != nil {
 		rt.Log.Error("Failed to send follow thank you message to chat", err)
 		telemetry.RecordError(span, err)
 		return
@@ -458,7 +484,7 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	// send to chat
-	if err := rt.Actions.SendMessage(fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName)); err != nil {
+	if err := rt.Actions.SendMessage(ctx, fmt.Sprintf("Gracias por el sub: %v", subEventResponse.Event.UserName)); err != nil {
 		rt.Log.Error("Failed to send subscription thank you message to chat", err)
 		telemetry.RecordError(span, err)
 		return
@@ -497,7 +523,7 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	// send to chat
-	if err := rt.Actions.SendMessage(fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName)); err != nil {
+	if err := rt.Actions.SendMessage(ctx, fmt.Sprintf("Gracias por los bits: %v", cheerEventResponse.Event.UserName)); err != nil {
 		rt.Log.Error("Failed to send cheer thank you message to chat", err)
 		telemetry.RecordError(span, err)
 		return
@@ -537,7 +563,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 
 	if rewardEventResponse.Event.Reward.Title == "Next Song" {
 		rt.Log.Info("Processing Next Song reward")
-		if err := rt.Spotify.NextSong(); err != nil {
+		if err := rt.Spotify.NextSong(ctx); err != nil {
 			rt.Log.Error("Failed to skip to next song", err)
 			telemetry.RecordError(span, err)
 			return
@@ -548,7 +574,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 		rt.Log.Info("Processing Add Song reward")
 		spotifyURL := rewardEventResponse.Event.UserInput
 		telemetry.AddSpanAttributes(span, attribute.String("spotify.url", spotifyURL))
-		if err := rt.Spotify.AddToPlaylist(spotifyURL); err != nil {
+		if err := rt.Spotify.AddToPlaylist(ctx, spotifyURL); err != nil {
 			rt.Log.Error("Failed to add song to playlist", err)
 			telemetry.RecordError(span, err)
 			return
@@ -557,7 +583,7 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
 		rt.Log.Info("Processing Reset Playlist reward")
-		if err := rt.Spotify.DeleteSongPlaylist(); err != nil {
+		if err := rt.Spotify.DeleteSongPlaylist(ctx); err != nil {
 			rt.Log.Error("Failed to reset playlist", err)
 			telemetry.RecordError(span, err)
 			return
@@ -569,11 +595,11 @@ func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
 }
 
 // TestHandler is used to test if the bot is responding to messages
-func (rt *Router) TestHandler(_ http.ResponseWriter, _ *http.Request) {
+func (rt *Router) TestHandler(_ http.ResponseWriter, r *http.Request) {
 	rt.Log.Info("Testing")
-	// rt.Actions.SendMessage("Test")
-	_ = rt.Notification.SendNotification("Test Message from Twitch Bot")
-	// rt.Spotify.NextSong()
+	if err := rt.Notification.SendNotification(r.Context(), "Test Message from Twitch Bot"); err != nil {
+		rt.Log.Error("Failed to send test notification", err)
+	}
 }
 
 // StreamOnlineHandler sends a message to discord
@@ -584,15 +610,16 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info("Received stream online event")
 
-	rt.streamStartTime = time.Now()
+	startTime := time.Now()
+	rt.streamStartTime.Store(startTime.UnixNano())
 	telemetry.AddSpanAttributes(span,
 		attribute.String("stream.event", "online"),
-		attribute.String("stream.start_time", rt.streamStartTime.Format(time.RFC3339)),
+		attribute.String("stream.start_time", startTime.Format(time.RFC3339)),
 	)
 
-	rt.Log.Info(fmt.Sprintf("Stream started at: %s", rt.streamStartTime.Format(time.RFC3339)))
+	rt.Log.Info(fmt.Sprintf("Stream started at: %s", startTime.Format(time.RFC3339)))
 
-	err := rt.Notification.SendNotification("En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
+	err := rt.Notification.SendNotification(ctx, "En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
 	if err != nil {
 		rt.Log.Error("Failed to send stream online notification to discord", err)
 		telemetry.RecordError(span, err)
@@ -617,8 +644,7 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Header.Add("Token", adminTokenValue)
-	client := http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpclient.Shared.Do(req)
 	if err != nil {
 		rt.Log.Error("Could not send request to webhook for X post", err)
 		telemetry.RecordError(span, err)
@@ -641,15 +667,16 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info("Received stream offline event")
 
-	if !rt.streamStartTime.IsZero() {
-		duration := time.Since(rt.streamStartTime).Seconds()
+	// Swap resets the start time as it reads it, so concurrent deliveries of the
+	// same offline event cannot both record a duration.
+	if startNanos := rt.streamStartTime.Swap(0); startNanos != 0 {
+		duration := time.Since(time.Unix(0, startNanos)).Seconds()
 		telemetry.RecordStreamDuration(ctx, duration)
 		telemetry.AddSpanAttributes(span,
 			attribute.String("stream.event", "offline"),
 			attribute.Float64("stream.duration_seconds", duration),
 		)
 		rt.Log.Info(fmt.Sprintf("Stream ended, duration: %.2f seconds", duration))
-		rt.streamStartTime = time.Time{} // Reset
 	} else {
 		rt.Log.Info("Stream offline event received but no start time was recorded")
 	}
@@ -660,7 +687,7 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 // PlayingHandler displays music playing in spotify
 // Supports query parameters: ?size=full|half|small or ?width=Xpx&height=Ypx
 func (rt *Router) PlayingHandler(w http.ResponseWriter, r *http.Request) {
-	song, err := rt.Spotify.GetSong()
+	song, err := rt.Spotify.GetSong(r.Context())
 	if err != nil {
 		rt.Log.Error("Failed to get current song", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -738,8 +765,8 @@ func (rt *Router) getSizePreset(preset string) (string, string, string, string, 
 }
 
 // PlaylistHandler displays the playlist
-func (rt *Router) PlaylistHandler(w http.ResponseWriter, _ *http.Request) {
-	songs, err := rt.Spotify.GetSongsPlaylist()
+func (rt *Router) PlaylistHandler(w http.ResponseWriter, r *http.Request) {
+	songs, err := rt.Spotify.GetSongsPlaylist(r.Context())
 	if err != nil {
 		rt.Log.Error("Failed to get playlist songs", err)
 		w.WriteHeader(http.StatusInternalServerError)

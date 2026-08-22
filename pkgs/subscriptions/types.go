@@ -110,7 +110,7 @@ type ChatMessageEvent struct {
 				} `json:"cheermote"`
 			} `json:"fragments"`
 		} `json:"message"`
-		Color       string    `json:"color"`
+		Color  string `json:"color"`
 		Badges []struct {
 			SetID string `json:"set_id"`
 			ID    string `json:"id"`

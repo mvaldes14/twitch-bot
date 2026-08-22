@@ -3,12 +3,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/mvaldes14/twitch-bot/pkgs/cache"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
 	"github.com/mvaldes14/twitch-bot/pkgs/server"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
@@ -46,28 +49,34 @@ func validateRequiredEnvVars() error {
 }
 
 func main() {
-	ctx := context.Background()
 	logger := telemetry.NewLogger("main")
+	if err := run(logger); err != nil {
+		logger.Error("Startup failed", err)
+		os.Exit(1)
+	}
+}
+
+// run holds the whole lifecycle so every deferred cleanup still executes on the
+// error paths. main is the only place allowed to call os.Exit.
+func run(logger *telemetry.CustomLogger) error {
+	ctx := context.Background()
 
 	// Validate required environment variables before initialization
 	if err := validateRequiredEnvVars(); err != nil {
-		logger.Error("Environment validation failed - aborting startup", err)
-		os.Exit(1)
+		return fmt.Errorf("environment validation failed: %w", err)
 	}
 	logger.Info("Environment variables validated successfully")
 
 	// Initialize OpenTelemetry
 	otelConfig := telemetry.GetConfigFromEnv()
 	if err := telemetry.InitOTEL(ctx, otelConfig); err != nil {
-		logger.Error("Failed to initialize OpenTelemetry", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize OpenTelemetry: %w", err)
 	}
 	logger.Info("OpenTelemetry initialized successfully")
 
 	// Initialize OTEL metrics
 	if err := telemetry.InitMetrics(); err != nil {
-		logger.Error("Failed to initialize metrics", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize metrics: %w", err)
 	}
 	logger.Info("Metrics initialized successfully")
 
@@ -80,33 +89,48 @@ func main() {
 		}
 	}()
 
-	s := secrets.NewSecretService()
+	s, err := secrets.NewSecretService()
+	if err != nil {
+		return fmt.Errorf("failed to initialize secret service: %w", err)
+	}
 	s.InitSecrets()
 
 	// Start background token renewal (cancelled on shutdown)
 	renewCtx, renewCancel := context.WithCancel(ctx)
+	defer renewCancel()
 	s.StartTokenRenewal(renewCtx)
 
 	logger.Info("Starting server on port" + port)
-	srv := server.NewServer(port)
+	srv, err := server.NewServer(port, s)
+	if err != nil {
+		return fmt.Errorf("failed to build server: %w", err)
+	}
 
 	// Channel to listen for interrupt signals
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// Run server in a goroutine
+	// Run server in a goroutine. A bind failure must reach main rather than
+	// leaving it blocked on a signal that will never arrive.
+	serverErr := make(chan error, 1)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			logger.Error("Server error", err)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
 		}
+		serverErr <- nil
 	}()
 
-	// Wait for interrupt signal
-	<-stop
-	logger.Info("Shutting down server gracefully...")
-
-	// Stop the token renewal goroutine
-	renewCancel()
+	// Wait for an interrupt signal or a server failure
+	select {
+	case <-stop:
+		logger.Info("Shutting down server gracefully...")
+	case err := <-serverErr:
+		if err != nil {
+			return fmt.Errorf("server error: %w", err)
+		}
+		logger.Info("Server stopped serving, shutting down...")
+	}
 
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -116,5 +140,10 @@ func main() {
 		logger.Error("Server shutdown failed", err)
 	}
 
+	if err := cache.Close(); err != nil {
+		logger.Error("Failed to close Redis connection", err)
+	}
+
 	logger.Info("Server stopped")
+	return nil
 }

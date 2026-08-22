@@ -43,10 +43,14 @@ type Spotify struct {
 	httpClient *http.Client
 }
 
-// NewSpotify creates a new spotify instance
-func NewSpotify() *Spotify {
+// NewSpotify creates a new spotify instance.
+// It fails if the Redis cache holding the Spotify token is unreachable.
+func NewSpotify() (*Spotify, error) {
 	logger := telemetry.NewLogger("spotify")
-	cacheService := cache.NewCacheService()
+	cacheService, err := cache.NewCacheService()
+	if err != nil {
+		return nil, fmt.Errorf("spotify client requires a reachable cache: %w", err)
+	}
 	playlistID := os.Getenv("SPOTIFY_PLAYLIST_ID")
 	if playlistID == "" {
 		playlistID = defaultPlaylistID
@@ -56,14 +60,14 @@ func NewSpotify() *Spotify {
 		Cache:      cacheService,
 		PlaylistID: playlistID,
 		httpClient: &http.Client{Timeout: requestTimeout},
-	}
+	}, nil
 }
 
 // getValidToken returns a valid token from Redis cache
 // Validates the token is not empty and fails early if missing
 // Returns clear error message indicating "spotify token missing from Redis cache"
-func (s *Spotify) getValidToken() (string, error) {
-	cachedToken, err := s.Cache.GetToken("SPOTIFY_TOKEN")
+func (s *Spotify) getValidToken(ctx context.Context) (string, error) {
+	cachedToken, err := s.Cache.GetToken(ctx, "SPOTIFY_TOKEN")
 	if err != nil {
 		tokenErr := fmt.Errorf("spotify token missing from Redis cache: %w", err)
 		s.Log.Error("Cannot proceed - spotify token not found in cache", tokenErr)
@@ -82,13 +86,12 @@ func (s *Spotify) getValidToken() (string, error) {
 }
 
 // NextSong Changes the currently playing song
-func (s *Spotify) NextSong() error {
-	ctx := context.Background()
+func (s *Spotify) NextSong(ctx context.Context) error {
 	ctx, span := telemetry.StartExternalSpan(ctx, "spotify.next_song", "spotify", "next_song")
 	defer span.End()
 
 	// Validate token exists in cache before making API call
-	token, err := s.getValidToken()
+	token, err := s.getValidToken(ctx)
 	if err != nil {
 		telemetry.RecordError(span, err)
 		return fmt.Errorf("failed to get valid token: %w", err)
@@ -122,7 +125,7 @@ func (s *Spotify) NextSong() error {
 		return nil
 	case http.StatusUnauthorized:
 		s.Log.Info("Token unauthorized, clearing cache")
-		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		_ = s.Cache.DeleteToken(ctx, "SPOTIFY_TOKEN")
 		telemetry.IncrementSpotifyOperation(ctx, "next_song", "unauthorized")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
@@ -133,12 +136,11 @@ func (s *Spotify) NextSong() error {
 }
 
 // GetSong returns the current song playing via chat
-func (s *Spotify) GetSong() (SpotifyCurrentlyPlaying, error) {
+func (s *Spotify) GetSong(ctx context.Context) (SpotifyCurrentlyPlaying, error) {
 	var currentlyPlaying SpotifyCurrentlyPlaying
-	ctx := context.Background()
 
 	// Validate token exists in cache before making API call
-	token, err := s.getValidToken()
+	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return currentlyPlaying, fmt.Errorf("failed to get valid token: %w", err)
 	}
@@ -158,7 +160,7 @@ func (s *Spotify) GetSong() (SpotifyCurrentlyPlaying, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode == http.StatusUnauthorized {
-		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		_ = s.Cache.DeleteToken(ctx, "SPOTIFY_TOKEN")
 		telemetry.IncrementSpotifyOperation(ctx, "get_song", "unauthorized")
 		return currentlyPlaying, fmt.Errorf("unauthorized: token may be expired")
 	}
@@ -213,7 +215,7 @@ func (s *Spotify) parseSong(url string) (string, error) {
 }
 
 // AddToPlaylist includes a song to the playlist
-func (s *Spotify) AddToPlaylist(song string) error {
+func (s *Spotify) AddToPlaylist(ctx context.Context, song string) error {
 	if song == "" {
 		return fmt.Errorf("empty song URL provided")
 	}
@@ -224,7 +226,7 @@ func (s *Spotify) AddToPlaylist(song string) error {
 	}
 
 	// Validate token exists in cache before making API call
-	token, err := s.getValidToken()
+	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
@@ -238,7 +240,6 @@ func (s *Spotify) AddToPlaylist(song string) error {
 		return fmt.Errorf("failed to parse song URL: %w", err)
 	}
 
-	ctx := context.Background()
 	reqBody := fmt.Sprintf("{\"uris\":[\"spotify:track:%v\"]}", songID)
 	req, err := http.NewRequestWithContext(ctx, "POST", addPlaylistURL, bytes.NewBuffer([]byte(reqBody)))
 	if err != nil {
@@ -262,7 +263,7 @@ func (s *Spotify) AddToPlaylist(song string) error {
 		telemetry.IncrementSpotifyOperation(ctx, "add_to_playlist", "success")
 		return nil
 	case http.StatusUnauthorized:
-		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		_ = s.Cache.DeleteToken(ctx, "SPOTIFY_TOKEN")
 		telemetry.IncrementSpotifyOperation(ctx, "add_to_playlist", "unauthorized")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
@@ -278,10 +279,9 @@ func (s *Spotify) validateURL(url string) bool {
 }
 
 // GetSongsPlaylistIDs returns a list of track IDs from the playlist
-func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
-	ctx := context.Background()
+func (s *Spotify) GetSongsPlaylistIDs(ctx context.Context) ([]string, error) {
 	// Validate token exists in cache before making API call
-	token, err := s.getValidToken()
+	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get valid token: %w", err)
 	}
@@ -303,7 +303,7 @@ func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode == http.StatusUnauthorized {
-		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		_ = s.Cache.DeleteToken(ctx, "SPOTIFY_TOKEN")
 		return nil, fmt.Errorf("unauthorized: token may be expired")
 	}
 
@@ -333,10 +333,9 @@ func (s *Spotify) GetSongsPlaylistIDs() ([]string, error) {
 }
 
 // GetSongsPlaylist returns a list of formatted song names from the playlist
-func (s *Spotify) GetSongsPlaylist() ([]string, error) {
-	ctx := context.Background()
+func (s *Spotify) GetSongsPlaylist(ctx context.Context) ([]string, error) {
 	// Validate token exists in cache before making API call
-	token, err := s.getValidToken()
+	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get valid token: %w", err)
 	}
@@ -358,7 +357,7 @@ func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode == http.StatusUnauthorized {
-		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		_ = s.Cache.DeleteToken(ctx, "SPOTIFY_TOKEN")
 		return nil, fmt.Errorf("unauthorized: token may be expired")
 	}
 
@@ -388,14 +387,14 @@ func (s *Spotify) GetSongsPlaylist() ([]string, error) {
 }
 
 // DeleteSongPlaylist wipes the playlist to start fresh
-func (s *Spotify) DeleteSongPlaylist() error {
+func (s *Spotify) DeleteSongPlaylist(ctx context.Context) error {
 	// Validate token exists in cache before making API call
-	token, err := s.getValidToken()
+	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get valid token: %w", err)
 	}
 
-	songs, err := s.GetSongsPlaylistIDs()
+	songs, err := s.GetSongsPlaylistIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get playlist songs: %w", err)
 	}
@@ -405,7 +404,6 @@ func (s *Spotify) DeleteSongPlaylist() error {
 		return nil
 	}
 
-	ctx := context.Background()
 	formatSongs := s.generateURISongs(songs)
 	reqBody := fmt.Sprintf("{\"tracks\":[%v]}", strings.Join(formatSongs, ","))
 
@@ -431,7 +429,7 @@ func (s *Spotify) DeleteSongPlaylist() error {
 		telemetry.IncrementSpotifyOperation(ctx, "delete_playlist", "success")
 		return nil
 	case http.StatusUnauthorized:
-		_ = s.Cache.DeleteToken("SPOTIFY_TOKEN")
+		_ = s.Cache.DeleteToken(ctx, "SPOTIFY_TOKEN")
 		telemetry.IncrementSpotifyOperation(ctx, "delete_playlist", "unauthorized")
 		return fmt.Errorf("unauthorized: token may be expired")
 	default:
