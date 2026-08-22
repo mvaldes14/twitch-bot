@@ -140,7 +140,7 @@ func (a *Actions) SendMessage(ctx context.Context, text string) error {
 		a.Log.Info("Got 401 sending message, refreshing app token and retrying")
 		telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
 		telemetry.IncrementTokenRefreshOn401(ctx, "send_message")
-		if refreshErr := a.Secrets.RefreshAppTokenAndStore(); refreshErr != nil {
+		if refreshErr := a.Secrets.RefreshAppTokenAndStore(ctx); refreshErr != nil {
 			a.Log.Error("Failed to refresh app token after 401", refreshErr)
 			telemetry.RecordError(span, refreshErr)
 			telemetry.IncrementMessageSent(ctx, "error")
@@ -181,7 +181,7 @@ func (a *Actions) sendMessageInternal(ctx context.Context, text string) error {
 	}
 
 	// Validate headers exist before making API call
-	headers, err := a.Secrets.BuildSecretHeaders()
+	headers, err := a.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		headerErr := fmt.Errorf("failed to build required headers for sending message: %w", err)
 		a.Log.Error("Cannot send message - missing required credentials", headerErr)
@@ -257,7 +257,7 @@ func (a *Actions) updateChannel(ctx context.Context, action subscriptions.ChatMe
 		}
 
 		// Validate headers exist before making API call
-		headers, err := a.Secrets.BuildSecretHeaders()
+		headers, err := a.Secrets.BuildSecretHeaders(ctx)
 		if err != nil {
 			headerErr := fmt.Errorf("failed to build required headers for updating channel: %w", err)
 			a.Log.Error("Cannot update channel - missing required credentials", headerErr)
@@ -265,7 +265,7 @@ func (a *Actions) updateChannel(ctx context.Context, action subscriptions.ChatMe
 			return
 		}
 
-		userToken, err := a.Secrets.GetUserToken()
+		userToken, err := a.Secrets.GetUserToken(ctx)
 		if err != nil {
 			headerErr := fmt.Errorf("failed to get user token from cache: %w", err)
 			a.Log.Error("Cannot update channel - user token missing from cache", headerErr)
@@ -296,7 +296,7 @@ func (a *Actions) updateChannel(ctx context.Context, action subscriptions.ChatMe
 			a.Log.Info("Got 401 updating channel, refreshing user token and retrying")
 			telemetry.AddSpanAttributes(span, attribute.Bool("token.refreshed_on_401", true))
 			telemetry.IncrementTokenRefreshOn401(ctx, "update_channel")
-			if refreshErr := a.Secrets.RefreshUserTokenAndStore(); refreshErr != nil {
+			if refreshErr := a.Secrets.RefreshUserTokenAndStore(ctx); refreshErr != nil {
 				a.Log.Error("Failed to refresh user token after 401", refreshErr)
 				telemetry.RecordError(span, refreshErr)
 				return

@@ -93,7 +93,7 @@ func run(logger *telemetry.CustomLogger) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize secret service: %w", err)
 	}
-	s.InitSecrets()
+	s.InitSecrets(ctx)
 
 	// Start background token renewal (cancelled on shutdown)
 	renewCtx, renewCancel := context.WithCancel(ctx)

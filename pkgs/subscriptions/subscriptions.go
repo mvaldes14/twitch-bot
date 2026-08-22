@@ -55,7 +55,7 @@ func (s *Subscription) CreateSubscription(ctx context.Context, payload string) e
 	defer span.End()
 
 	// Validate Twitch API credentials before attempting subscription creation
-	headers, err := s.Secrets.BuildSecretHeaders()
+	headers, err := s.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		errMsg := fmt.Errorf("cannot create subscription without valid Twitch credentials: %w", err)
 		s.Log.Error("Subscription creation failed - missing required credentials (TWITCH_APP_TOKEN or TWITCH_CLIENT_ID)", errMsg)
@@ -124,7 +124,7 @@ func (s *Subscription) GetSubscriptions(ctx context.Context) (ValidateSubscripti
 	defer span.End()
 
 	// Validate Twitch API credentials before attempting to list subscriptions
-	headers, err := s.Secrets.BuildSecretHeaders()
+	headers, err := s.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		errMsg := fmt.Errorf("cannot list subscriptions without valid Twitch credentials: %w", err)
 		s.Log.Error("Cannot list subscriptions - Twitch API credentials (TWITCH_APP_TOKEN) missing from Redis cache or TWITCH_CLIENT_ID missing from environment", errMsg)
@@ -203,7 +203,7 @@ func (s *Subscription) DeleteSubscriptions(ctx context.Context, subs ValidateSub
 // the enclosing loop.
 func (s *Subscription) deleteSubscription(ctx context.Context, id string) error {
 	// Validate Twitch API credentials before attempting deletion
-	headers, err := s.Secrets.BuildSecretHeaders()
+	headers, err := s.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
 		errMsg := fmt.Errorf("cannot delete subscription %s without valid Twitch credentials: %w", id, err)
 		s.Log.Error(fmt.Sprintf("Skipping subscription deletion - headers missing: %v", err), errMsg)
