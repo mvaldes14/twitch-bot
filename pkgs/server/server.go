@@ -34,12 +34,9 @@ func NewServer(port string, secretService *secrets.SecretService) (*http.Server,
 	router.HandleFunc("/chat", rs.ChatHandler)
 	router.HandleFunc("/sub", rs.SubHandler)
 	router.HandleFunc("/cheer", rs.CheerHandler)
-	router.HandleFunc("/reward", rs.RewardHandler)
 	router.HandleFunc("/stream-online", rs.StreamOnlineHandler)
 	router.HandleFunc("/stream-offline", rs.StreamOfflineHandler)
 	router.HandleFunc("/health", rs.HealthHandler)
-	router.HandleFunc("/playing", rs.PlayingHandler)
-	router.HandleFunc("/playlist", rs.PlaylistHandler)
 	router.HandleFunc("/test", rs.TestHandler)
 
 	router.Handle("/api/", http.StripPrefix("/api", rs.CheckAuthAdmin(api)))

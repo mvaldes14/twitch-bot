@@ -24,6 +24,15 @@ func TestSubscriptionTypesHaveCallbackPaths(t *testing.T) {
 	}
 }
 
+func TestRewardSubscriptionIsNotRegistered(t *testing.T) {
+	if _, ok := subscriptionTypes["reward"]; ok {
+		t.Fatal("reward EventSub registration should not be available because the bot no longer handles reward-based song controls")
+	}
+	if _, ok := endpointPaths["reward"]; ok {
+		t.Fatal("reward callback endpoint should not be registered")
+	}
+}
+
 func TestGeneratePayloadCallback(t *testing.T) {
 	rt := testRouter()
 
@@ -36,7 +45,6 @@ func TestGeneratePayloadCallback(t *testing.T) {
 		{"follow", "follow", "https://bots.mvaldes.dev/follow"},
 		{"subscription", "subscription", "https://bots.mvaldes.dev/sub"},
 		{"cheer", "cheer", "https://bots.mvaldes.dev/cheer"},
-		{"reward", "reward", "https://bots.mvaldes.dev/reward"},
 		{"stream online", "streamon", "https://bots.mvaldes.dev/stream-online"},
 		{"stream offline", "streamoff", "https://bots.mvaldes.dev/stream-offline"},
 	}

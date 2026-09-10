@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"sync/atomic"
-	"text/template"
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/actions"
@@ -17,7 +16,6 @@ import (
 	"github.com/mvaldes14/twitch-bot/pkgs/httpclient"
 	"github.com/mvaldes14/twitch-bot/pkgs/notifications"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
-	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 	"go.opentelemetry.io/otel/attribute"
@@ -29,7 +27,6 @@ const (
 
 var (
 	errorInvalidSbuscription     = errors.New("could not generate a valid subscription")
-	errorNoMusicPlaying          = errors.New("nothing is playing on spotify")
 	errorUnknownSubscriptionName = errors.New("no callback path registered for subscription name")
 )
 
@@ -56,11 +53,6 @@ var subscriptionTypes = map[string]subscriptions.SubscriptionType{
 		Version: "1",
 		Type:    "channel.cheer",
 	},
-	"reward": {
-		Name:    "reward",
-		Version: "1",
-		Type:    "channel.channel_points_custom_reward_redemption.add",
-	},
 	"streamon": {
 		Name:    "streamon",
 		Version: "1",
@@ -81,24 +73,11 @@ type RequestJSON struct {
 	Headers map[string]string
 }
 
-// SongData represents the data for the song
-type SongData struct {
-	Title          string
-	Artist         string
-	AlbumArt       string
-	Width          string
-	Height         string
-	AlbumArtSize   string
-	TitleFontSize  string
-	ArtistFontSize string
-}
-
 // Router is the struct that handles all routes
 type Router struct {
 	Subs         *subscriptions.Subscription
 	Secrets      *secrets.SecretService
 	Actions      *actions.Actions
-	Spotify      *spotify.Spotify
 	Log          *telemetry.CustomLogger
 	Notification *notifications.NotificationService
 	Cache        *cache.Service
@@ -121,10 +100,6 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 	if err != nil {
 		return nil, fmt.Errorf("router requires an actions service: %w", err)
 	}
-	spotifyClient, err := spotify.NewSpotify()
-	if err != nil {
-		return nil, fmt.Errorf("router requires a spotify client: %w", err)
-	}
 	cacheService, err := cache.NewCacheService()
 	if err != nil {
 		return nil, fmt.Errorf("router requires a reachable cache: %w", err)
@@ -136,7 +111,6 @@ func NewRouter(subs *subscriptions.Subscription, secretService *secrets.SecretSe
 		Subs:         subs,
 		Secrets:      secretService,
 		Actions:      actionsService,
-		Spotify:      spotifyClient,
 		Notification: notify,
 		Cache:        cacheService,
 	}, nil
@@ -531,69 +505,6 @@ func (rt *Router) CheerHandler(_ http.ResponseWriter, r *http.Request) {
 	rt.Log.Info(fmt.Sprintf("Successfully processed cheer from: %s", cheerEventResponse.Event.UserName))
 }
 
-// RewardHandler responds to reward events
-func (rt *Router) RewardHandler(_ http.ResponseWriter, r *http.Request) {
-	ctx, span := telemetry.StartSpan(r.Context(), "handle_reward")
-	defer span.End()
-
-	rt.Log.Info("Received reward redemption event")
-
-	telemetry.IncrementRewardCount(ctx)
-	var rewardEventResponse subscriptions.RewardEvent
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		rt.Log.Error("Failed to read reward event request body", err)
-		telemetry.RecordError(span, err)
-		return
-	}
-	defer r.Body.Close()
-
-	if err := json.Unmarshal(body, &rewardEventResponse); err != nil {
-		rt.Log.Error("Failed to unmarshal reward event payload", err)
-		telemetry.RecordError(span, err)
-		return
-	}
-
-	rt.Log.Info(fmt.Sprintf("Reward redeemed by: %s, reward: %s", rewardEventResponse.Event.UserName, rewardEventResponse.Event.Reward.Title))
-
-	telemetry.AddSpanAttributes(span,
-		attribute.String("reward.title", rewardEventResponse.Event.Reward.Title),
-		attribute.String("reward.user", rewardEventResponse.Event.UserName),
-	)
-
-	if rewardEventResponse.Event.Reward.Title == "Next Song" {
-		rt.Log.Info("Processing Next Song reward")
-		if err := rt.Spotify.NextSong(ctx); err != nil {
-			rt.Log.Error("Failed to skip to next song", err)
-			telemetry.RecordError(span, err)
-			return
-		}
-		rt.Log.Info("Successfully skipped to next song")
-	}
-	if rewardEventResponse.Event.Reward.Title == "Add Song" {
-		rt.Log.Info("Processing Add Song reward")
-		spotifyURL := rewardEventResponse.Event.UserInput
-		telemetry.AddSpanAttributes(span, attribute.String("spotify.url", spotifyURL))
-		if err := rt.Spotify.AddToPlaylist(ctx, spotifyURL); err != nil {
-			rt.Log.Error("Failed to add song to playlist", err)
-			telemetry.RecordError(span, err)
-			return
-		}
-		rt.Log.Info(fmt.Sprintf("Successfully added song to playlist: %s", spotifyURL))
-	}
-	if rewardEventResponse.Event.Reward.Title == "Reset Playlist" {
-		rt.Log.Info("Processing Reset Playlist reward")
-		if err := rt.Spotify.DeleteSongPlaylist(ctx); err != nil {
-			rt.Log.Error("Failed to reset playlist", err)
-			telemetry.RecordError(span, err)
-			return
-		}
-		rt.Log.Info("Successfully reset playlist")
-	}
-
-	rt.Log.Info(fmt.Sprintf("Successfully processed reward from: %s", rewardEventResponse.Event.UserName))
-}
-
 // TestHandler is used to test if the bot is responding to messages
 func (rt *Router) TestHandler(_ http.ResponseWriter, r *http.Request) {
 	rt.Log.Info("Testing")
@@ -682,96 +593,4 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 
 	rt.Log.Info("Successfully processed stream offline event")
-}
-
-// PlayingHandler displays music playing in spotify
-// Supports query parameters: ?size=full|half|small or ?width=Xpx&height=Ypx
-func (rt *Router) PlayingHandler(w http.ResponseWriter, r *http.Request) {
-	song, err := rt.Spotify.GetSong(r.Context())
-	if err != nil {
-		rt.Log.Error("Failed to get current song", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if !song.IsPlaying {
-		rt.Log.Error("No Music", errorNoMusicPlaying)
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	if song.Item.Name == "" || len(song.Item.Artists) == 0 || len(song.Item.Album.Images) == 0 {
-		rt.Log.Error("Incomplete song data", errorNoMusicPlaying)
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	// Parse query parameters for sizing
-	query := r.URL.Query()
-	width, height, albumArtSize, titleFontSize, artistFontSize := rt.getSizeDefaults()
-
-	if sizePreset := query.Get("size"); sizePreset != "" {
-		width, height, albumArtSize, titleFontSize, artistFontSize = rt.getSizePreset(sizePreset)
-	} else {
-		// Allow custom width/height
-		if customWidth := query.Get("width"); customWidth != "" {
-			width = customWidth
-		}
-		if customHeight := query.Get("height"); customHeight != "" {
-			height = customHeight
-		}
-	}
-
-	data := SongData{
-		Title:          song.Item.Name,
-		Artist:         song.Item.Artists[0].Name,
-		AlbumArt:       song.Item.Album.Images[0].URL,
-		Width:          width,
-		Height:         height,
-		AlbumArtSize:   albumArtSize,
-		TitleFontSize:  titleFontSize,
-		ArtistFontSize: artistFontSize,
-	}
-	tmpl, err := template.ParseFiles("./templates/index.html")
-	if err != nil {
-		rt.Log.Error("Error parsing template", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, "Error executing template", http.StatusInternalServerError)
-		return
-	}
-}
-
-// getSizeDefaults returns default size values
-func (rt *Router) getSizeDefaults() (string, string, string, string, string) {
-	return "250px", "100px", "80px", "1em", "1em"
-}
-
-// getSizePreset returns sizing based on preset names
-func (rt *Router) getSizePreset(preset string) (string, string, string, string, string) {
-	switch preset {
-	case "full":
-		return "100vw", "100vh", "40vh", "3em", "2em"
-	case "half":
-		return "50vw", "50vh", "20vh", "2.5em", "1.8em"
-	case "large":
-		return "600px", "400px", "300px", "2em", "1.5em"
-	case "small":
-		return "200px", "80px", "60px", "0.9em", "0.8em"
-	default:
-		return rt.getSizeDefaults()
-	}
-}
-
-// PlaylistHandler displays the playlist
-func (rt *Router) PlaylistHandler(w http.ResponseWriter, r *http.Request) {
-	songs, err := rt.Spotify.GetSongsPlaylist(r.Context())
-	if err != nil {
-		rt.Log.Error("Failed to get playlist songs", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	rt.Log.Info(songs)
 }
