@@ -2,14 +2,13 @@
 
 ## Description
 
-A comprehensive Go-based Twitch bot designed for streamers who want to enhance their channel with chat commands, music integration, and automated notifications. This bot provides chat interaction features, Spotify playlist control, Discord notifications, and external automation integrations to create an engaging streaming experience.
+A Go-based Twitch bot designed for streamers who want to enhance their channel with chat commands and automated notifications. This bot provides chat interaction features, Twitch EventSub handlers, Discord notifications, and external automation integrations to create an engaging streaming experience.
 
 ## Features
 
 ### Chat Commands
 - `!github` - Links to GitHub profile
 - `!dotfiles` - Links to dotfiles repository
-- `!song` - Shows currently playing Spotify track
 - `!social` - Shows social media links
 - `!blog` - Links to blog
 - `!youtube` - Links to YouTube channel
@@ -21,10 +20,8 @@ A comprehensive Go-based Twitch bot designed for streamers who want to enhance t
 - **Follows**: Sends "Gracias por el follow" message
 - **Subscriptions**: Sends "Gracias por el sub" message  
 - **Cheers/Bits**: Sends "Gracias por los bits" message
-- **Channel Point Rewards**: Handles "Next Song", "Add Song", and "Reset Playlist" rewards
 
 ### Integrations
-- **Spotify**: Music playback control, playlist management, and "Now Playing" display
 - **Discord**: Stream notifications when going live
 - **External Automation**: Webhooks to automate.mvaldes.dev for additional notifications
 
@@ -35,25 +32,23 @@ A comprehensive Go-based Twitch bot designed for streamers who want to enhance t
 *   `/metrics`: Prometheus metrics endpoint
 
 ### Twitch EventSub Webhooks
-*   `/events/chat`: Handles chat messages and commands
-*   `/events/follow`: Processes new follower events
-*   `/events/subscription`: Processes subscription events
-*   `/events/cheer`: Processes cheer/bits events
-*   `/events/reward`: Processes channel point reward redemptions
+*   `/chat`: Handles chat messages and commands
+*   `/follow`: Processes new follower events
+*   `/sub`: Processes subscription events
+*   `/cheer`: Processes cheer/bits events
+*   `/stream-online`: Processes stream online events
+*   `/stream-offline`: Processes stream offline events
 
 ### Subscription Management
-*   `/subscriptions`:
-    *   `GET`: Lists current EventSub subscriptions
-    *   `POST`: Creates new subscription (types: `chat`, `follow`, `subscription`, `cheer`, `reward`, `stream`)
-    *   `DELETE`: Deletes all subscriptions (Admin-protected)
+Admin-protected API routes live under `/api`:
+*   `GET /api/list`: Lists current EventSub subscriptions
+*   `POST /api/create`: Creates a new subscription (types: `chat`, `follow`, `subscription`, `cheer`, `streamon`, `streamoff`)
+*   `POST /api/delete`: Deletes all subscriptions
 
 ### Stream Management
-*   `/stream`: Triggers stream live notifications to Discord and external services (Admin-protected)
-*   `/test`: Sends test chat message and skips to next Spotify song
-
-### Music Integration
-*   `/playing`: Shows currently playing Spotify song with album art
-*   `/playlist`: Displays current Spotify playlist
+*   `/stream-online`: Triggers stream live notifications to Discord and external services
+*   `/stream-offline`: Records stream end timing
+*   `/test`: Sends a test notification
 
 ## Setup Instructions
 
@@ -82,12 +77,6 @@ The bot uses environment variables for configuration. Required environment varia
 - `TWITCH_CLIENT_SECRET`: Twitch application client secret
 - `TWITCH_USER_TOKEN`: Twitch user token for chat and API access
 - `TWITCH_REFRESH_TOKEN`: Refresh token for token renewal
-
-#### Spotify
-- `SPOTIFY_REFRESH_TOKEN`: Spotify refresh token for token renewal
-- `SPOTIFY_CLIENT_ID`: Spotify OAuth application client ID
-- `SPOTIFY_CLIENT_SECRET`: Spotify OAuth application client secret
-- `SPOTIFY_PLAYLIST_ID`: Target Spotify playlist ID (optional, has a default)
 
 #### Notifications
 - `DISCORD_WEBHOOK`: Discord webhook URL for stream notifications
@@ -129,11 +118,9 @@ The project is organized into several packages:
 *   `pkgs/routes`: Defines HTTP routes and handlers.
 *   `pkgs/secrets`: Handles secrets management and Doppler integration.
 *   `pkgs/server`: Contains the HTTP server implementation.
-*   `pkgs/spotify`: Integrates with Spotify API for music control.
 *   `pkgs/subscriptions`: Manages Twitch EventSub subscriptions.
 *   `pkgs/telemetry`: Provides logging, OpenTelemetry tracing, and metrics.
 *   `pkgs/cache`: Redis-based token caching and storage.
-*   `templates`: Stores HTML templates for the web interface.
 
 ## Contributing
 
@@ -148,7 +135,6 @@ This project is licensed under the MIT License - see the [LICENSE](file:///home/
 - Built with Go 1.22+
 - Uses OpenTelemetry for tracing and metrics
 - Integrates with Twitch EventSub API
-- Supports Spotify Web API
 - Uses Redis for token caching
 - Uses Doppler for secret management
 

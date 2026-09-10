@@ -29,7 +29,6 @@ var endpointPaths = map[string]string{
 	"chat":      "chat",
 	"follow":    "follow",
 	"cheer":     "cheer",
-	"reward":    "reward",
 	"streamon":  "stream-online",
 	"streamoff": "stream-offline",
 }
@@ -73,7 +72,7 @@ func (rt *Router) GeneratePayload(subType subscriptions.SubscriptionType) (strin
 		condition["user_id"] = userID
 	case "follow":
 		condition["moderator_user_id"] = userID
-	case "subscribe", "cheer", "reward", "streamon", "streamoff":
+	case "subscribe", "cheer", "streamon", "streamoff":
 	}
 
 	endpointPath, ok := endpointPaths[subType.Name]

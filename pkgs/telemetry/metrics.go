@@ -14,8 +14,6 @@ var (
 
 	// SubscriptionCount counts new subscriptions
 	SubscriptionCount metric.Int64Counter
-	// RewardCount counts redeemed rewards
-	RewardCount metric.Int64Counter
 	// FollowCount counts new followers
 	FollowCount metric.Int64Counter
 	// CheerCount counts new followers
@@ -24,8 +22,6 @@ var (
 	APICallCount metric.Int64Counter
 	// StreamDuration tracks how long streams last
 	StreamDuration metric.Float64Gauge
-	// SpotifySongChanged counts the number of times the Spotify song changes
-	SpotifySongChanged metric.Int64Counter
 	// ChatMessageCount counts the number of chat messages per stream
 	ChatMessageCount metric.Int64Counter
 
@@ -44,9 +40,6 @@ var (
 
 	// Notification metrics
 	NotificationSentTotal metric.Int64Counter
-
-	// Spotify operation metrics
-	SpotifyOperationTotal metric.Int64Counter
 )
 
 // InitMetrics initializes all OTEL metrics
@@ -56,14 +49,6 @@ func InitMetrics() error {
 	SubscriptionCount, err = meter.Int64Counter(
 		"twitch.subscription_count",
 		metric.WithDescription("Number of subscriptions active"),
-	)
-	if err != nil {
-		return err
-	}
-
-	RewardCount, err = meter.Int64Counter(
-		"twitch.reward_count",
-		metric.WithDescription("Number of rewards redeemed"),
 	)
 	if err != nil {
 		return err
@@ -96,14 +81,6 @@ func InitMetrics() error {
 	StreamDuration, err = meter.Float64Gauge(
 		"twitch.stream_duration_seconds",
 		metric.WithDescription("Duration of streams in seconds"),
-	)
-	if err != nil {
-		return err
-	}
-
-	SpotifySongChanged, err = meter.Int64Counter(
-		"twitch.spotify_song_changed_count",
-		metric.WithDescription("Number of times the Spotify song changed"),
 	)
 	if err != nil {
 		return err
@@ -185,15 +162,6 @@ func InitMetrics() error {
 		return err
 	}
 
-	// Spotify operation metrics
-	SpotifyOperationTotal, err = meter.Int64Counter(
-		"twitch.spotify_operation_total",
-		metric.WithDescription("Spotify API operations by type and result"),
-	)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -201,13 +169,6 @@ func InitMetrics() error {
 func IncrementSubscriptionCount(ctx context.Context) {
 	if SubscriptionCount != nil {
 		SubscriptionCount.Add(ctx, 1)
-	}
-}
-
-// IncrementRewardCount records a channel point reward redemption.
-func IncrementRewardCount(ctx context.Context) {
-	if RewardCount != nil {
-		RewardCount.Add(ctx, 1)
 	}
 }
 
@@ -236,13 +197,6 @@ func IncrementAPICallCount(ctx context.Context) {
 func RecordStreamDuration(ctx context.Context, duration float64) {
 	if StreamDuration != nil {
 		StreamDuration.Record(ctx, duration)
-	}
-}
-
-// IncrementSpotifySongChanged records a Spotify song change event.
-func IncrementSpotifySongChanged(ctx context.Context) {
-	if SpotifySongChanged != nil {
-		SpotifySongChanged.Add(ctx, 1)
 	}
 }
 
@@ -339,18 +293,6 @@ func IncrementNotificationSent(ctx context.Context, service, result string) {
 		NotificationSentTotal.Add(ctx, 1,
 			metric.WithAttributes(
 				attribute.String("service", service),
-				attribute.String("result", result),
-			),
-		)
-	}
-}
-
-// IncrementSpotifyOperation records a Spotify API operation with operation type and result labels.
-func IncrementSpotifyOperation(ctx context.Context, operation, result string) {
-	if SpotifyOperationTotal != nil {
-		SpotifyOperationTotal.Add(ctx, 1,
-			metric.WithAttributes(
-				attribute.String("operation", operation),
 				attribute.String("result", result),
 			),
 		)

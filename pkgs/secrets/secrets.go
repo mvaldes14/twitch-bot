@@ -4,15 +4,12 @@ package secrets
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/mvaldes14/twitch-bot/pkgs/cache"
@@ -26,26 +23,17 @@ const (
 	twitchUserToken      = "TWITCH_USER_TOKEN"
 	twitchClientID       = "TWITCH_CLIENT_ID"
 	twitchSecret         = "TWITCH_CLIENT_SECRET"
-	spotifyRefreshToken  = "SPOTIFY_REFRESH_TOKEN"
-	spotifyClientID      = "SPOTIFY_CLIENT_ID"
-	spotifyClientSecret  = "SPOTIFY_CLIENT_SECRET"
 	requestTimeout       = 30 * time.Second
 	twitchUserExpiration = 14400 // 4 hours in seconds
 	twitchAppExpiration  = 14400
-	spotifyExpiration    = 3600
 
 	// API Endpoints
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
 	twitchValidURL = "https://id.twitch.tv/oauth2/validate"
-	tokenURL       = "https://accounts.spotify.com/api/token"
 )
 
 var (
 	errMissingTokenOrID = errors.New("token or client ID not found in environment")
-	errSpotifyNoToken   = errors.New("failed to produce a new token")
-	errInvalidRequest   = errors.New("failed to create HTTP request")
-	errHTTPRequest      = errors.New("HTTP request failed")
-	errResponseParsing  = errors.New("failed to parse response")
 )
 
 // SecretService implements SecretManager interface
@@ -69,7 +57,7 @@ func NewSecretService() (*SecretService, error) {
 
 // GetEnvironmentVariable retrieves an environment variable and validates it exists and is not empty.
 // Returns a clear error message indicating which variable is missing and its purpose.
-// Used for: TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, ADMIN_TOKEN, TWITCH_REFRESH_TOKEN
+// Used for: TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, ADMIN_TOKEN, TWITCH_REFRESH_TOKEN
 func (s *SecretService) GetEnvironmentVariable(key string) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
@@ -131,23 +119,6 @@ func (s *SecretService) InitSecrets(ctx context.Context) {
 			Expiration: time.Duration(expiresIn) * time.Second,
 		}); err != nil {
 			s.Log.Error("Failed to store TWITCH_APP_TOKEN in Redis:", err)
-		}
-	}
-
-	// Spotify Token
-	if _, err := s.Cache.GetToken(ctx, "SPOTIFY_TOKEN"); err != nil {
-		s.Log.Info("[SOURCE: GENERATED] SPOTIFY_TOKEN not in cache, generating from refresh token")
-		newSpotifyToken, err := s.GetSpotifyToken(ctx)
-		if err != nil {
-			s.Log.Error("Failed to generate SPOTIFY_TOKEN - check if SPOTIFY_REFRESH_TOKEN and credentials are set:", err)
-		} else {
-			if err := s.Cache.StoreToken(ctx, cache.Token{
-				Key:        "SPOTIFY_TOKEN",
-				Value:      newSpotifyToken,
-				Expiration: time.Duration(spotifyExpiration) * time.Second,
-			}); err != nil {
-				s.Log.Error("Failed to store SPOTIFY_TOKEN in Redis:", err)
-			}
 		}
 	}
 }
@@ -365,91 +336,6 @@ func (s *SecretService) MakeRequestMarshallJSON(ctx context.Context, req Request
 	return json.Unmarshal(body, target)
 }
 
-// GetSpotifyToken retrieves a new Spotify token using the refresh token.
-// Returns a specific error indicating which Spotify credentials are missing.
-func (s *SecretService) GetSpotifyToken(ctx context.Context) (string, error) {
-	ctx, span := telemetry.StartExternalSpan(ctx, "spotify.refresh_token", "spotify", "refresh_token")
-	defer span.End()
-
-	refreshToken := os.Getenv(spotifyRefreshToken)
-	clientID := os.Getenv(spotifyClientID)
-	clientSecret := os.Getenv(spotifyClientSecret)
-
-	// Build detailed error message indicating which credentials are missing
-	var missingVars []string
-	if refreshToken == "" {
-		missingVars = append(missingVars, "SPOTIFY_REFRESH_TOKEN")
-	}
-	if clientID == "" {
-		missingVars = append(missingVars, "SPOTIFY_CLIENT_ID")
-	}
-	if clientSecret == "" {
-		missingVars = append(missingVars, "SPOTIFY_CLIENT_SECRET")
-	}
-
-	if len(missingVars) > 0 {
-		missingErr := fmt.Errorf("missing Spotify credentials in environment: %v - required to refresh Spotify access tokens. Pass these as environment variables", missingVars)
-		s.Log.Error(missingErr.Error(), missingErr)
-		telemetry.RecordError(span, missingErr)
-		return "", missingErr
-	}
-
-	encodedToken := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))
-	params := url.Values{}
-	params.Set("grant_type", "refresh_token")
-	params.Set("refresh_token", refreshToken)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(params.Encode()))
-	if err != nil {
-		s.Log.Error("Error forming request for GetSpotifyToken", err)
-		telemetry.RecordError(span, err)
-		return "", errInvalidRequest
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Basic "+encodedToken)
-
-	s.Log.Info("Requesting New Spotify token")
-	res, err := s.httpClient.Do(req)
-	if err != nil {
-		s.Log.Error("Error sending request to get new token", err)
-		telemetry.RecordError(span, err)
-		return "", errHTTPRequest
-	}
-	defer res.Body.Close()
-
-	telemetry.SetSpanStatus(span, res.StatusCode)
-
-	if res.StatusCode != http.StatusOK {
-		s.Log.Error("Token request failed with status", fmt.Errorf("status: %d", res.StatusCode))
-		return "", errSpotifyNoToken
-	}
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		s.Log.Error("Error reading token response body", err)
-		telemetry.RecordError(span, err)
-		return "", errResponseParsing
-	}
-
-	var t SpotifyTokenResponse
-	if err = json.Unmarshal(body, &t); err != nil {
-		s.Log.Error("Error unmarshalling token response", err)
-		telemetry.RecordError(span, err)
-		return "", errResponseParsing
-	}
-
-	if t.AccessToken == "" {
-		s.Log.Error("Received empty access token", errSpotifyNoToken)
-		telemetry.RecordError(span, errSpotifyNoToken)
-		telemetry.IncrementTokenRefreshTotal(ctx, "spotify", "error")
-		return "", errSpotifyNoToken
-	}
-
-	telemetry.IncrementTokenRefreshTotal(ctx, "spotify", "success")
-	return t.AccessToken, nil
-}
-
 // refreshAndStoreAppToken refreshes the Twitch app token and stores it in Redis.
 func (s *SecretService) refreshAndStoreAppToken(ctx context.Context) error {
 	ctx, span := telemetry.StartSpan(ctx, "secrets.refresh_and_store_app_token")
@@ -493,28 +379,6 @@ func (s *SecretService) refreshAndStoreUserToken(ctx context.Context) error {
 	}
 	telemetry.AddSpanAttributes(span, attribute.Int("token.expires_in", expiresIn))
 	s.Log.Info("Twitch user token refreshed, expires in:", expiresIn)
-	return nil
-}
-
-// refreshAndStoreSpotifyToken refreshes the Spotify token and stores it in Redis.
-func (s *SecretService) refreshAndStoreSpotifyToken(ctx context.Context) error {
-	ctx, span := telemetry.StartSpan(ctx, "secrets.refresh_and_store_spotify_token")
-	defer span.End()
-
-	newToken, err := s.GetSpotifyToken(ctx)
-	if err != nil {
-		telemetry.RecordError(span, err)
-		return fmt.Errorf("failed to refresh spotify token: %w", err)
-	}
-	if err := s.Cache.StoreToken(ctx, cache.Token{
-		Key:        "SPOTIFY_TOKEN",
-		Value:      newToken,
-		Expiration: time.Duration(spotifyExpiration) * time.Second,
-	}); err != nil {
-		telemetry.RecordError(span, err)
-		return fmt.Errorf("failed to store spotify token: %w", err)
-	}
-	s.Log.Info("Spotify token refreshed")
 	return nil
 }
 
@@ -603,17 +467,5 @@ func (s *SecretService) renewTokens(ctx context.Context) {
 	default:
 		telemetry.AddSpanAttributes(span, attribute.String("user_token.action", "still_valid"))
 		telemetry.IncrementTokenValidationTotal(ctx, "user", true)
-	}
-
-	// Spotify Token — expires every hour
-	if _, err := s.Cache.GetToken(ctx, "SPOTIFY_TOKEN"); err != nil {
-		s.Log.Info("Spotify token missing from cache, refreshing")
-		telemetry.AddSpanAttributes(span, attribute.String("spotify_token.action", "refresh_missing"))
-		if err := s.refreshAndStoreSpotifyToken(ctx); err != nil {
-			s.Log.Error("Background renewal: failed to refresh spotify token", err)
-			telemetry.RecordError(span, err)
-		}
-	} else {
-		telemetry.AddSpanAttributes(span, attribute.String("spotify_token.action", "still_valid"))
 	}
 }

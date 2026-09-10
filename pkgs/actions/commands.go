@@ -13,7 +13,6 @@ import (
 
 	"github.com/mvaldes14/twitch-bot/pkgs/httpclient"
 	"github.com/mvaldes14/twitch-bot/pkgs/secrets"
-	"github.com/mvaldes14/twitch-bot/pkgs/spotify"
 	"github.com/mvaldes14/twitch-bot/pkgs/subscriptions"
 	"github.com/mvaldes14/twitch-bot/pkgs/telemetry"
 	"go.opentelemetry.io/otel/attribute"
@@ -41,21 +40,14 @@ var channelTags = []string{
 type Actions struct {
 	Log     *telemetry.CustomLogger
 	Secrets *secrets.SecretService
-	Spotify *spotify.Spotify
 }
 
 // NewActions creates a new Actions instance.
-// It fails if the Spotify client cannot be constructed.
 func NewActions(secretService *secrets.SecretService) (*Actions, error) {
 	logger := telemetry.NewLogger("actions")
-	spotifyClient, err := spotify.NewSpotify()
-	if err != nil {
-		return nil, fmt.Errorf("actions require a spotify client: %w", err)
-	}
 	return &Actions{
 		Log:     logger,
 		Secrets: secretService,
-		Spotify: spotifyClient,
 	}, nil
 }
 
@@ -75,7 +67,7 @@ func (a *Actions) ParseMessage(ctx context.Context, msg subscriptions.ChatMessag
 	switch msg.Event.Message.Text {
 	case "!commands":
 		telemetry.IncrementCommandExecuted(ctx, "commands")
-		a.say(ctx, "!github, !dotfiles, !song, !social, !blog, !youtube ")
+		a.say(ctx, "!github, !dotfiles, !social, !blog, !youtube ")
 	case "!github":
 		telemetry.IncrementCommandExecuted(ctx, "github")
 		a.say(ctx, "https://links.mvaldes.dev/gh")
@@ -97,21 +89,6 @@ func (a *Actions) ParseMessage(ctx context.Context, msg subscriptions.ChatMessag
 	case "!youtube":
 		telemetry.IncrementCommandExecuted(ctx, "youtube")
 		a.say(ctx, "https://links.mvaldes.dev/youtube")
-	case "!song":
-		telemetry.IncrementCommandExecuted(ctx, "song")
-		song, err := a.Spotify.GetSong(ctx)
-		if err != nil {
-			a.Log.Error("Failed to get current song", err)
-			a.say(ctx, "Sorry, couldn't get the current song")
-			return
-		}
-		if song.Item.Name == "" || len(song.Item.Artists) == 0 {
-			a.say(ctx, "No song currently playing")
-			return
-		}
-		songMsg := fmt.Sprintf("Now playing: %v - %v", song.Item.Artists[0].Name, song.Item.Name)
-		a.Log.Info(songMsg)
-		a.say(ctx, songMsg)
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
