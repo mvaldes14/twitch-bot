@@ -142,4 +142,4 @@ This project is licensed under the MIT License - see the [LICENSE](file:///home/
 
 Repository: https://github.com/mvaldes14/twitch-bot
 
-See it live at https://links.mvaldes.dev/stream
+See it live at https://umami.mvaldes.dev/q/twitch

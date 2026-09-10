@@ -530,7 +530,7 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info(fmt.Sprintf("Stream started at: %s", startTime.Format(time.RFC3339)))
 
-	err := rt.Notification.SendNotification(ctx, "En vivo y en directo @everyone - https://links.mvaldes.dev/stream")
+	err := rt.Notification.SendNotification(ctx, "En vivo y en directo @everyone - https://umami.mvaldes.dev/q/twitch")
 	if err != nil {
 		rt.Log.Error("Failed to send stream online notification to discord", err)
 		telemetry.RecordError(span, err)
