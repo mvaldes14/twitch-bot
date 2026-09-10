@@ -70,25 +70,25 @@ func (a *Actions) ParseMessage(ctx context.Context, msg subscriptions.ChatMessag
 		a.say(ctx, "!github, !dotfiles, !social, !blog, !youtube ")
 	case "!github":
 		telemetry.IncrementCommandExecuted(ctx, "github")
-		a.say(ctx, "https://links.mvaldes.dev/gh")
+		a.say(ctx, "https://umami.mvaldes.dev/q/github")
 	case "!dotfiles":
 		telemetry.IncrementCommandExecuted(ctx, "dotfiles")
-		a.say(ctx, "https://links.mvaldes.dev/dotfiles")
+		a.say(ctx, "https://umami.mvaldes.dev/q/dotfiles")
 	case "!test":
 		telemetry.IncrementCommandExecuted(ctx, "test")
 		a.say(ctx, "Test Me")
 	case "!social":
 		telemetry.IncrementCommandExecuted(ctx, "social")
-		a.say(ctx, "https://links.mvaldes.dev/twitter")
+		a.say(ctx, "https://umami.mvaldes.dev/q/twitter")
 	case "!blog":
 		telemetry.IncrementCommandExecuted(ctx, "blog")
-		a.say(ctx, "https://mvaldes.dev")
+		a.say(ctx, "https://umami.mvaldes.dev/q/blog")
 	case "!discord":
 		telemetry.IncrementCommandExecuted(ctx, "discord")
-		a.say(ctx, "https://links.mvaldes.dev/discord")
+		a.say(ctx, "https://umami.mvaldes.dev/q/discord")
 	case "!youtube":
 		telemetry.IncrementCommandExecuted(ctx, "youtube")
-		a.say(ctx, "https://links.mvaldes.dev/youtube")
+		a.say(ctx, "https://umami.mvaldes.dev/q/youtube")
 	}
 	// Complex commands
 	if strings.HasPrefix(msg.Event.Message.Text, "!today") {
