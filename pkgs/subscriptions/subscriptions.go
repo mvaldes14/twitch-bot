@@ -190,7 +190,7 @@ func (s *Subscription) DeleteSubscriptions(ctx context.Context, subs ValidateSub
 
 	var errs []error
 	for _, sub := range subs.Data {
-		if err := s.deleteSubscription(ctx, sub.ID); err != nil {
+		if err := s.DeleteSubscription(ctx, sub.ID); err != nil {
 			telemetry.RecordError(span, err)
 			errs = append(errs, err)
 		}
@@ -198,10 +198,8 @@ func (s *Subscription) DeleteSubscriptions(ctx context.Context, subs ValidateSub
 	return errors.Join(errs...)
 }
 
-// deleteSubscription removes a single subscription. It is a separate function
-// so the response body is closed on each iteration rather than at the end of
-// the enclosing loop.
-func (s *Subscription) deleteSubscription(ctx context.Context, id string) error {
+// DeleteSubscription removes a single subscription by ID.
+func (s *Subscription) DeleteSubscription(ctx context.Context, id string) error {
 	// Validate Twitch API credentials before attempting deletion
 	headers, err := s.Secrets.BuildSecretHeaders(ctx)
 	if err != nil {
