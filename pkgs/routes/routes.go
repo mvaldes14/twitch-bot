@@ -2,6 +2,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,6 +92,14 @@ type Router struct {
 // SubscriptionTypeRequest is the struct for generating new subscriptions
 type SubscriptionTypeRequest struct {
 	Type string `json:"type"`
+}
+
+// DeleteSubscriptionRequest selects subscriptions to delete.
+// Type may be "all" or one of the create types: chat, follow, subscription,
+// cheer, streamon, streamoff. ID deletes a specific Twitch EventSub ID.
+type DeleteSubscriptionRequest struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
 }
 
 // NewRouter creates a new router.
@@ -230,22 +239,69 @@ func (rt *Router) respondToChallenge(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-// DeleteHandler deletes all subscriptions
+// DeleteHandler deletes subscriptions selected by request payload.
 func (rt *Router) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	var deleteRequest DeleteSubscriptionRequest
+	if err := json.NewDecoder(r.Body).Decode(&deleteRequest); err != nil {
+		if !errors.Is(err, io.EOF) {
+			rt.Log.Error("Could not decode delete subscription request", err)
+			http.Error(w, "Invalid delete subscription request", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if deleteRequest.ID != "" {
+		if err := rt.Subs.DeleteSubscription(ctx, deleteRequest.ID); err != nil {
+			rt.Log.Error("Could not delete subscription", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if deleteRequest.Type == "" {
+		http.Error(w, "Missing delete type or id", http.StatusBadRequest)
+		return
+	}
+
 	subsList, err := rt.Subs.GetSubscriptions(ctx)
 	if err != nil {
 		rt.Log.Error("Could not get subscriptions", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	err = rt.Subs.DeleteSubscriptions(ctx, subsList)
+
+	if deleteRequest.Type == "all" {
+		err = rt.Subs.DeleteSubscriptions(ctx, subsList)
+	} else if subTypeConfig, ok := subscriptionTypes[deleteRequest.Type]; ok {
+		err = rt.deleteSubscriptionsByType(ctx, subsList, subTypeConfig.Type)
+	} else {
+		http.Error(w, "Invalid subscription type", http.StatusBadRequest)
+		return
+	}
+
 	if err != nil {
 		rt.Log.Error("Could not delete subscriptions", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (rt *Router) deleteSubscriptionsByType(ctx context.Context, subsList subscriptions.ValidateSubscription, eventType string) error {
+	var errs []error
+	for _, sub := range subsList.Data {
+		if sub.Type != eventType {
+			continue
+		}
+		if err := rt.Subs.DeleteSubscription(ctx, sub.ID); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // HealthHandler returns a healthy message

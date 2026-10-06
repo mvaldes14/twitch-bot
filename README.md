@@ -43,7 +43,7 @@ A Go-based Twitch bot designed for streamers who want to enhance their channel w
 Admin-protected API routes live under `/api`:
 *   `GET /api/list`: Lists current EventSub subscriptions
 *   `POST /api/create`: Creates a new subscription (types: `chat`, `follow`, `subscription`, `cheer`, `streamon`, `streamoff`)
-*   `POST /api/delete`: Deletes all subscriptions
+*   `POST /api/delete`: Deletes subscriptions by payload (`{"type":"all"}`, `{"type":"streamon"}`, or `{"id":"<subscription-id>"}`)
 
 ### Stream Management
 *   `/stream-online`: Triggers stream live notifications to Discord and external services
