@@ -46,6 +46,10 @@ var (
 func InitMetrics() error {
 	var err error
 
+	// Resolve the meter at initialization time so tests and startup use the
+	// currently configured global MeterProvider.
+	meter = otel.Meter("twitch.bot")
+
 	SubscriptionCount, err = meter.Int64Counter(
 		"twitch.subscription_count",
 		metric.WithDescription("Number of subscriptions active"),
