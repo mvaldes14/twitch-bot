@@ -24,6 +24,7 @@ A Go-based Twitch bot designed for streamers who want to enhance their channel w
 ### Integrations
 - **Discord**: Stream notifications when going live
 - **External Automation**: Webhooks to automate.mvaldes.dev for additional notifications
+- **Social Reminders**: Optional in-chat rotating reminders while stream is live
 
 ## API Endpoints
 
@@ -94,6 +95,9 @@ The bot uses environment variables for configuration. Required environment varia
 #### Other
 - `ADMIN_TOKEN`: Token used to authenticate admin-protected API routes
 - `DOPPLER_TOKEN`: Doppler token for secret management (optional)
+- `SOCIAL_REMINDER_ENABLED`: Set to `true` to enable rotating in-chat social reminders while stream is live (defaults to off)
+- `SOCIAL_REMINDER_INTERVAL`: Reminder cadence as Go duration, e.g. `30m` (defaults to `30m`, minimum `10m`)
+- `SOCIAL_REMINDER_MESSAGES`: Pipe-separated reminder messages. Defaults to Spanish YouTube/Discord/social messages.
 
 #### Development
 The project uses Nix flakes for development environment. Run `direnv allow` to load the environment.
