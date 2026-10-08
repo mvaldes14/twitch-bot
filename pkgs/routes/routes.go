@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -93,6 +94,12 @@ type Router struct {
 	// stream is in progress. A single Router is shared across every request
 	// goroutine and Twitch retries webhook deliveries, so access is atomic.
 	streamStartTime atomic.Int64
+
+	// reminderCancel owns the per-stream social reminder scheduler. Guarded by
+	// reminderMu because EventSub retries can deliver duplicate online/offline
+	// events concurrently.
+	reminderMu     sync.Mutex
+	reminderCancel context.CancelFunc
 }
 
 // SubscriptionTypeRequest is the struct for generating new subscriptions
@@ -591,6 +598,7 @@ func (rt *Router) StreamOnlineHandler(_ http.ResponseWriter, r *http.Request) {
 	)
 
 	rt.Log.Info(fmt.Sprintf("Stream started at: %s", startTime.Format(time.RFC3339)))
+	rt.startSocialReminders()
 
 	err := rt.Notification.SendNotification(ctx, "En vivo y en directo @everyone - https://umami.mvaldes.dev/q/twitch")
 	if err != nil {
@@ -639,6 +647,7 @@ func (rt *Router) StreamOfflineHandler(_ http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	rt.Log.Info("Received stream offline event")
+	rt.stopSocialReminders()
 
 	// Swap resets the start time as it reads it, so concurrent deliveries of the
 	// same offline event cannot both record a duration.
