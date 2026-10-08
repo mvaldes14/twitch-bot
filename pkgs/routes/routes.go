@@ -74,11 +74,17 @@ type RequestJSON struct {
 	Headers map[string]string
 }
 
+// ActionService is the chat action surface used by webhook handlers.
+type ActionService interface {
+	ParseMessage(context.Context, subscriptions.ChatMessageEvent)
+	SendMessage(context.Context, string) error
+}
+
 // Router is the struct that handles all routes
 type Router struct {
 	Subs         *subscriptions.Subscription
 	Secrets      *secrets.SecretService
-	Actions      *actions.Actions
+	Actions      ActionService
 	Log          *telemetry.CustomLogger
 	Notification *notifications.NotificationService
 	Cache        *cache.Service
@@ -453,7 +459,6 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info("Received follow event")
 
-	telemetry.IncrementFollowCount(ctx)
 	var followEventResponse subscriptions.FollowEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -471,6 +476,7 @@ func (rt *Router) FollowHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info(fmt.Sprintf("New follower: %s", followEventResponse.Event.UserName))
 
+	telemetry.IncrementFollowCount(ctx)
 	telemetry.AddSpanAttributes(span,
 		attribute.String("follow.user", followEventResponse.Event.UserName),
 	)
@@ -491,7 +497,6 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info("Received subscription event")
 
-	telemetry.IncrementSubscriptionCount(ctx)
 	var subEventResponse subscriptions.SubscriptionEvent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -509,6 +514,7 @@ func (rt *Router) SubHandler(_ http.ResponseWriter, r *http.Request) {
 
 	rt.Log.Info(fmt.Sprintf("New subscriber: %s", subEventResponse.Event.UserName))
 
+	telemetry.IncrementSubscriptionCount(ctx)
 	telemetry.AddSpanAttributes(span,
 		attribute.String("subscription.user", subEventResponse.Event.UserName),
 	)
