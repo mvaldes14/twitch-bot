@@ -56,23 +56,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Run Go CI
+        uses: mvaldes14/gh-actions/go-ci@main
         with:
           go-version: "1.25"
-
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-
-      - name: Check test coverage
-        run: |
-          total_coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          echo "Total coverage: ${total_coverage}%"
-          # Optional: fail if coverage is below threshold
-          # if (( $(echo "$total_coverage < 50" | bc -l) )); then
-          #   echo "Coverage is below 50%"
-          #   exit 1
-          # fi
+          test-args: -v
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'push' || github.event_name == 'pull_request'
