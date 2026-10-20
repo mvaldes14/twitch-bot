@@ -14,15 +14,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: golangci-lint
+        uses: mvaldes14/gh-actions/golint@main
         with:
           go-version: "1.25"
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.5
+          version: v2.5.0
           args: --timeout=5m
 
   security:
